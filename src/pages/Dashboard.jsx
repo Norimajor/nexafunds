@@ -97,12 +97,16 @@ export default function Dashboard() {
       value: eaSettings.pamm_access ? 'Enabled' : 'Paused',
       detail: eaSettings.pamm_access ? 'Investor portal connected' : 'Access disabled for investors',
       tone: 'sky',
+      actionLabel: 'Open PAMM account',
+      actionUrl: 'https://alpari.com/en/pamm-account/?utm_source=chatgpt.com',
     },
     {
       label: 'Broker access',
       value: eaSettings.broker_access ? 'Verified' : 'Restricted',
       detail: eaSettings.broker_access ? 'MT5 account live and synced' : 'Broker connection paused',
       tone: 'emerald',
+      actionLabel: 'Access broker',
+      actionUrl: 'https://alpari.com/?Referral=73819',
     },
   ]
 
@@ -376,6 +380,18 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <p className={isDark ? 'mt-3 text-sm text-slate-300' : 'mt-3 text-sm text-slate-600'}>{card.detail}</p>
+                  <a
+                    href={card.actionUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={
+                      card.tone === 'sky'
+                        ? 'mt-4 inline-flex items-center justify-center rounded-xl bg-sky-600 px-3 py-2 text-sm font-medium text-white shadow-lg shadow-sky-600/20 transition hover:-translate-y-0.5'
+                        : 'mt-4 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5'
+                    }
+                  >
+                    {card.actionLabel}
+                  </a>
                 </div>
               ))}
             </section>
