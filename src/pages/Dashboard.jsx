@@ -89,6 +89,21 @@ export default function Dashboard() {
     { title: 'Broker account verified', time: '2 days ago', value: 'OK' },
   ]
 
+  const accessCards = [
+    {
+      label: 'PAMM access',
+      value: 'Enabled',
+      detail: 'Investor portal connected',
+      tone: 'sky',
+    },
+    {
+      label: 'Broker access',
+      value: 'Verified',
+      detail: 'MT5 account live and synced',
+      tone: 'emerald',
+    },
+  ]
+
   const saveEaSettings = async () => {
     try {
       const response = await fetch('http://localhost:4000/api/ea/settings', {
@@ -329,6 +344,36 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-2">
+              {accessCards.map((card) => (
+                <div
+                  key={card.label}
+                  className={
+                    isDark
+                      ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.28)] backdrop-blur-xl'
+                      : 'rounded-3xl border border-slate-200 bg-white/75 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)] backdrop-blur-xl'
+                  }
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>{card.label}</p>
+                      <h4 className="mt-2 text-2xl font-bold">{card.value}</h4>
+                    </div>
+                    <span
+                      className={
+                        card.tone === 'sky'
+                          ? 'rounded-full bg-sky-500/10 px-2 py-1 text-xs font-medium text-sky-500'
+                          : 'rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500'
+                      }
+                    >
+                      Active
+                    </span>
+                  </div>
+                  <p className={isDark ? 'mt-3 text-sm text-slate-300' : 'mt-3 text-sm text-slate-600'}>{card.detail}</p>
+                </div>
+              ))}
             </section>
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
