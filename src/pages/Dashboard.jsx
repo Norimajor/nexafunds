@@ -219,7 +219,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Broker & PAMM Access Section */}
+      {/* Broker & PAMM Access Section */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -251,15 +251,15 @@ export default function Dashboard() {
             </div>
 
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4">
-              <p className="text-xs text-gray-500 mb-1">Temporary Link</p>
+              <p className="text-xs text-gray-500 mb-1">Your IB Link</p>
 
               <p className="text-sm text-blue-600 break-all">
-                https://www.hfm.com/en/open-live-account
+                https://alpari.com/?Referral=73819
               </p>
             </div>
 
             <a
-              href="https://www.hfm.com/en/open-live-account"
+              href="https://alpari.com/?Referral=73819"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center justify-center w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-medium transition"
@@ -285,7 +285,7 @@ export default function Dashboard() {
             </div>
 
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4">
-              <p className="text-xs text-gray-500 mb-1">Temporary Link</p>
+              <p className="text-xs text-gray-500 mb-1">PAMM Platform</p>
 
               <p className="text-sm text-blue-600 break-all">
                 https://alpari.com/en/invest/pamm/
@@ -309,14 +309,18 @@ export default function Dashboard() {
 
             <div>
               <h5 className="font-medium text-blue-900 mb-1">
-                Demo Links
+                Your Referral Setup
               </h5>
 
               <p className="text-sm text-blue-700">
-                These are temporary public broker and PAMM links. Replace them later with your official IB/referral links so new investors are connected under your partner account.
+                Investors who create an Alpari account using the referral link above should be connected under your partner referral code.
               </p>
             </div>
-                  {/* PAMM Statistics Section */}
+          </div>
+        </div>
+      </div>
+
+      {/* PAMM Statistics Section */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
@@ -402,10 +406,9 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
-          </div>
-        </div>
-      </div>
     </main>
   </div>
 </div>
-  )}
+)
+}
+
