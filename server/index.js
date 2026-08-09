@@ -7,7 +7,7 @@ import { Resend } from 'resend'
 
 dotenv.config()
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
 const app = express()
 const db = new sqlite3.Database('./database.db')
@@ -15,7 +15,7 @@ const pendingVerifications = new Map()
 app.use(cors())
 app.use(express.json())
 
-// Create users table
+// Create tables
 db.run(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,6 +29,49 @@ db.run(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `)
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    amount REAL NOT NULL,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`)
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS account_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  )
+`)
+
+const seedAccountDefaults = () => {
+  const defaultEntries = [
+    ['current_balance', '6000'],
+    ['total_profit', '4200'],
+    ['portfolio_value', '10200'],
+    ['total_invested', '6000'],
+    ['ea_name', 'Nexa Gold Scalper'],
+    ['ea_risk', 'Moderate'],
+    ['ea_drawdown', '12'],
+    ['ea_status', 'Live'],
+    ['auto_trade', 'true'],
+    ['push_notifications', 'true'],
+    ['max_order_size', '1.5'],
+  ]
+
+  defaultEntries.forEach(([key, value]) => {
+    db.get('SELECT 1 FROM account_settings WHERE key = ?', [key], (err, row) => {
+      if (!err && !row) {
+        db.run('INSERT INTO account_settings (key, value) VALUES (?, ?)', [key, value])
+      }
+    })
+  })
+}
+
+seedAccountDefaults()
 
 // ================= TEST ROUTE =================
 app.get('/', (req, res) => {
@@ -56,6 +99,14 @@ app.post('/api/send-code', async (req, res) => {
   })
 
   try {
+    if (!resend) {
+      return res.json({
+        success: true,
+        message: 'Verification code generated in local mode',
+        code,
+      })
+    }
+
     await resend.emails.send({
       from: 'NexaFunds <onboarding@resend.dev>',
       to: email,
@@ -226,6 +277,188 @@ app.post('/api/login', (req, res) => {
       })
     }
   )
+})
+
+// ================= ACCOUNT SUMMARY =================
+app.get('/api/account/summary', (req, res) => {
+  db.all(
+    'SELECT type, amount, created_at FROM transactions ORDER BY created_at DESC',
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          error: err.message,
+        })
+      }
+
+      const currentBalance = rows.reduce((total, row) => {
+        return row.type === 'deposit' ? total + Number(row.amount) : total - Number(row.amount)
+      }, 0)
+
+      const totalProfit = currentBalance > 0 ? currentBalance - 6000 : 0
+      const portfolioValue = currentBalance + 4200
+      const totalInvested = 6000
+
+      res.json({
+        success: true,
+        summary: {
+          currentBalance,
+          totalProfit,
+          portfolioValue,
+          totalInvested,
+          monthlyGain: 12.5,
+          totalReturn: 48.7,
+        },
+      })
+    }
+  )
+})
+
+// ================= TRANSACTIONS =================
+app.get('/api/transactions', (req, res) => {
+  db.all(
+    'SELECT id, type, amount, note, created_at FROM transactions ORDER BY created_at DESC',
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          error: err.message,
+        })
+      }
+
+      res.json({
+        success: true,
+        transactions: rows,
+      })
+    }
+  )
+})
+
+app.post('/api/transactions', (req, res) => {
+  const { type, amount, note } = req.body
+
+  if (!type || !['deposit', 'withdrawal'].includes(type)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Transaction type must be deposit or withdrawal',
+    })
+  }
+
+  if (!amount || Number(amount) <= 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'A valid amount is required',
+    })
+  }
+
+  db.run(
+    'INSERT INTO transactions (type, amount, note) VALUES (?, ?, ?)',
+    [type, Number(amount), note || ''],
+    function (insertErr) {
+      if (insertErr) {
+        return res.status(500).json({
+          success: false,
+          error: insertErr.message,
+        })
+      }
+
+      const transaction = {
+        id: this.lastID,
+        type,
+        amount: Number(amount),
+        note: note || '',
+        created_at: new Date().toISOString(),
+      }
+
+      res.status(201).json({
+        success: true,
+        message: `${type === 'deposit' ? 'Deposit' : 'Withdrawal'} logged successfully`,
+        transaction,
+      })
+    }
+  )
+})
+
+// ================= EA SETTINGS =================
+app.get('/api/ea/settings', (req, res) => {
+  db.all(
+    "SELECT key, value FROM account_settings WHERE key LIKE 'ea_%' OR key IN ('auto_trade', 'push_notifications', 'max_order_size') ORDER BY key",
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          error: err.message,
+        })
+      }
+
+      const settings = rows.reduce((acc, row) => {
+        acc[row.key] = row.value
+        return acc
+      }, {})
+
+      res.json({
+        success: true,
+        settings: {
+          ea_name: settings.ea_name || 'Nexa Gold Scalper',
+          ea_risk: settings.ea_risk || 'Moderate',
+          ea_drawdown: settings.ea_drawdown || '12',
+          ea_status: settings.ea_status || 'Live',
+          auto_trade: settings.auto_trade === 'true',
+          push_notifications: settings.push_notifications === 'true',
+          max_order_size: settings.max_order_size || '1.5',
+        },
+      })
+    }
+  )
+})
+
+app.put('/api/ea/settings', (req, res) => {
+  const { ea_name, ea_risk, ea_drawdown, ea_status, auto_trade, push_notifications, max_order_size } = req.body || {}
+
+  const updates = [
+    ['ea_name', ea_name || 'Nexa Gold Scalper'],
+    ['ea_risk', ea_risk || 'Moderate'],
+    ['ea_drawdown', String(ea_drawdown ?? '12')],
+    ['ea_status', ea_status || 'Live'],
+    ['auto_trade', String(Boolean(auto_trade))],
+    ['push_notifications', String(Boolean(push_notifications))],
+    ['max_order_size', String(max_order_size ?? '1.5')],
+  ]
+
+  const next = () => {
+    const entry = updates.shift()
+    if (!entry) {
+      return res.json({
+        success: true,
+        message: 'EA settings updated successfully',
+      })
+    }
+
+    const [key, value] = entry
+    db.get('SELECT 1 FROM account_settings WHERE key = ?', [key], (selectErr, row) => {
+      if (selectErr) {
+        return res.status(500).json({ success: false, error: selectErr.message })
+      }
+
+      if (row) {
+        db.run('UPDATE account_settings SET value = ? WHERE key = ?', [value, key], (updateErr) => {
+          if (updateErr) {
+            return res.status(500).json({ success: false, error: updateErr.message })
+          }
+          next()
+        })
+      } else {
+        db.run('INSERT INTO account_settings (key, value) VALUES (?, ?)', [key, value], (insertErr) => {
+          if (insertErr) {
+            return res.status(500).json({ success: false, error: insertErr.message })
+          }
+          next()
+        })
+      }
+    })
+  }
+
+  next()
 })
 
 // ================= GET ALL USERS =================
