@@ -17,6 +17,8 @@ const defaultSettings = {
   auto_trade: true,
   push_notifications: true,
   max_order_size: '1.5',
+  pamm_access: true,
+  broker_access: true,
 }
 
 export default function Dashboard() {
@@ -92,14 +94,14 @@ export default function Dashboard() {
   const accessCards = [
     {
       label: 'PAMM access',
-      value: 'Enabled',
-      detail: 'Investor portal connected',
+      value: eaSettings.pamm_access ? 'Enabled' : 'Paused',
+      detail: eaSettings.pamm_access ? 'Investor portal connected' : 'Access disabled for investors',
       tone: 'sky',
     },
     {
       label: 'Broker access',
-      value: 'Verified',
-      detail: 'MT5 account live and synced',
+      value: eaSettings.broker_access ? 'Verified' : 'Restricted',
+      detail: eaSettings.broker_access ? 'MT5 account live and synced' : 'Broker connection paused',
       tone: 'emerald',
     },
   ]
@@ -117,6 +119,8 @@ export default function Dashboard() {
           auto_trade: eaSettings.auto_trade,
           push_notifications: eaSettings.push_notifications,
           max_order_size: eaSettings.max_order_size,
+          pamm_access: eaSettings.pamm_access,
+          broker_access: eaSettings.broker_access,
         }),
       })
 
@@ -686,6 +690,26 @@ export default function Dashboard() {
                     type="checkbox"
                     checked={eaSettings.push_notifications}
                     onChange={(event) => setEaSettings({ ...eaSettings, push_notifications: event.target.checked })}
+                    className="h-4 w-4 rounded"
+                  />
+                </label>
+
+                <label className={isDark ? 'flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100' : 'flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800'}>
+                  <span>PAMM access</span>
+                  <input
+                    type="checkbox"
+                    checked={eaSettings.pamm_access}
+                    onChange={(event) => setEaSettings({ ...eaSettings, pamm_access: event.target.checked })}
+                    className="h-4 w-4 rounded"
+                  />
+                </label>
+
+                <label className={isDark ? 'flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100' : 'flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800'}>
+                  <span>Broker access</span>
+                  <input
+                    type="checkbox"
+                    checked={eaSettings.broker_access}
+                    onChange={(event) => setEaSettings({ ...eaSettings, broker_access: event.target.checked })}
                     className="h-4 w-4 rounded"
                   />
                 </label>

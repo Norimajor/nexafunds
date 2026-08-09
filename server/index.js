@@ -60,6 +60,8 @@ const seedAccountDefaults = () => {
     ['auto_trade', 'true'],
     ['push_notifications', 'true'],
     ['max_order_size', '1.5'],
+    ['pamm_access', 'true'],
+    ['broker_access', 'true'],
   ]
 
   defaultEntries.forEach(([key, value]) => {
@@ -382,7 +384,7 @@ app.post('/api/transactions', (req, res) => {
 // ================= EA SETTINGS =================
 app.get('/api/ea/settings', (req, res) => {
   db.all(
-    "SELECT key, value FROM account_settings WHERE key LIKE 'ea_%' OR key IN ('auto_trade', 'push_notifications', 'max_order_size') ORDER BY key",
+    "SELECT key, value FROM account_settings WHERE key LIKE 'ea_%' OR key IN ('auto_trade', 'push_notifications', 'max_order_size', 'pamm_access', 'broker_access') ORDER BY key",
     (err, rows) => {
       if (err) {
         return res.status(500).json({
@@ -406,6 +408,8 @@ app.get('/api/ea/settings', (req, res) => {
           auto_trade: settings.auto_trade === 'true',
           push_notifications: settings.push_notifications === 'true',
           max_order_size: settings.max_order_size || '1.5',
+          pamm_access: settings.pamm_access === 'true',
+          broker_access: settings.broker_access === 'true',
         },
       })
     }
@@ -413,7 +417,7 @@ app.get('/api/ea/settings', (req, res) => {
 })
 
 app.put('/api/ea/settings', (req, res) => {
-  const { ea_name, ea_risk, ea_drawdown, ea_status, auto_trade, push_notifications, max_order_size } = req.body || {}
+  const { ea_name, ea_risk, ea_drawdown, ea_status, auto_trade, push_notifications, max_order_size, pamm_access, broker_access } = req.body || {}
 
   const updates = [
     ['ea_name', ea_name || 'Nexa Gold Scalper'],
@@ -423,6 +427,8 @@ app.put('/api/ea/settings', (req, res) => {
     ['auto_trade', String(Boolean(auto_trade))],
     ['push_notifications', String(Boolean(push_notifications))],
     ['max_order_size', String(max_order_size ?? '1.5')],
+    ['pamm_access', String(Boolean(pamm_access))],
+    ['broker_access', String(Boolean(broker_access))],
   ]
 
   const next = () => {
