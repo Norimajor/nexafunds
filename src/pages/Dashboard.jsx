@@ -1,7 +1,16 @@
 import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [totalUsers, setTotalUsers] = useState(0)
+
+useEffect(() => {
+  fetch('http://localhost:4000/api/stats/users')
+    .then((res) => res.json())
+    .then((data) => setTotalUsers(data.totalUsers))
+    .catch((err) => console.error(err))
+}, [])
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
@@ -403,6 +412,12 @@ export default function Dashboard() {
 
           <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition w-full md:w-auto">
             View Full Performance
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+  <p className="text-sm text-gray-500">Registered Investors</p>
+  <h3 className="text-2xl font-bold text-blue-600 mt-2">
+    {totalUsers}
+  </h3>
+</div>
           </button>
         </div>
       </div>

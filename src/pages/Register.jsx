@@ -10,8 +10,13 @@ export default function Register() {
   const options = useMemo(() => countryList().getData(), [])
   const [country, setCountry] = useState(null)
 
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [firstName, setFirstName] = useState('')
+const [lastName, setLastName] = useState('')
+const [email, setEmail] = useState('')
+const [city, setCity] = useState('')
+const [address, setAddress] = useState('')
+const [password, setPassword] = useState('')
+const [confirmPassword, setConfirmPassword] = useState('')
 
   // Password strength checker
   const getStrength = (pwd) => {
@@ -56,23 +61,28 @@ export default function Register() {
                 First Name
               </label>
 
-              <input
-                type="text"
-                placeholder="John"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
+             <input
+  type="text"
+  value={firstName}
+  onChange={(e) => setFirstName(e.target.value)}
+  placeholder="John"
+  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+/>
+              
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Last Name
               </label>
-
-              <input
-                type="text"
-                placeholder="Doe"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
+<input
+  type="text"
+  value={lastName}
+  onChange={(e) => setLastName(e.target.value)}
+  placeholder="Doe"
+  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+/>
+              
             </div>
           </div>
 
@@ -81,12 +91,13 @@ export default function Register() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Email Address
             </label>
-
-            <input
-              type="email"
-              placeholder="you@example.com"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            />
+<input
+  type="email"
+  value={email}
+  onChange={(e) => setEmail(e.target.value)}
+  placeholder="you@example.com"
+  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+/>
           </div>
 
           {/* Country & City */}
@@ -144,12 +155,13 @@ export default function Register() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 City
               </label>
-
-              <input
-                type="text"
-                placeholder="Nairobi"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
+<input
+  type="text"
+  value={city}
+  onChange={(e) => setCity(e.target.value)}
+  placeholder="Nairobi"
+  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+/>
             </div>
           </div>
 
@@ -159,11 +171,13 @@ export default function Register() {
               Postal Address
             </label>
 
-            <textarea
-              rows="3"
-              placeholder="P.O. Box 12345, Nairobi, Kenya"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
-            />
+          <textarea
+  rows="3"
+  value={address}
+  onChange={(e) => setAddress(e.target.value)}
+  placeholder="P.O. Box 12345, Nairobi, Kenya"
+  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+/>
           </div>
 
           {/* Password */}
@@ -245,18 +259,47 @@ export default function Register() {
           </div>
 
           {/* Submit */}
-          <button
-            type="button"
-            disabled={password !== confirmPassword || !password}
-            onClick={() => navigate('/dashboard')}
-            className={`w-full py-3 rounded-xl font-semibold transition ${
-              password === confirmPassword && password
-                ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            Create Investor Account
-          </button>
+       <button
+  type="button"
+  disabled={password !== confirmPassword || !password}
+  onClick={async () => {
+    try {
+      const response = await fetch('http://localhost:4000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          country: country?.searchLabel || '',
+          city,
+          address,
+          password,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('Account created successfully!')
+        navigate('/login')
+      } else {
+        alert(data.error)
+      }
+    } catch (err) {
+      alert('Unable to connect to backend server')
+    }
+  }}
+  className={`w-full py-3 rounded-xl font-semibold transition ${
+    password === confirmPassword && password
+      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+  }`}
+>
+  Create Investor Account
+</button>
         </form>
 
         {/* Login Link */}

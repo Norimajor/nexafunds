@@ -1,61 +1,144 @@
 import express from 'express'
 import cors from 'cors'
 import sqlite3 from 'sqlite3'
+import bcrypt from 'bcrypt'
 
 const app = express()
-const PORT = 5000
+const db = new sqlite3.Database('./database.db')
 
 app.use(cors())
 app.use(express.json())
 
-// Create database
-const db = new sqlite3.Database('./database.db')
+// Create users table
+db.run(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT,
+    last_name TEXT,
+    email TEXT UNIQUE,
+    country TEXT,
+    city TEXT,
+    address TEXT,
+    password TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`)
 
-// Create tables
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE,
-      balance REAL DEFAULT 0
-    )
-  `)
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT,
-      amount REAL,
-      method TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `)
-
-  // Demo user
-  db.run(`
-    INSERT OR IGNORE INTO users (id, email, balance)
-    VALUES (1, 'demo@nexafunds.com', 7420.50)
-  `)
+// ================= TEST ROUTE =================
+app.get('/', (req, res) => {
+  res.send('NexaFunds backend is running')
 })
 
-// Dashboard balance
-app.get('/api/dashboard', (req, res) => {
-  db.get('SELECT balance FROM users WHERE id = 1', (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: err.message })
+// ================= REGISTER =================
+app.post('/api/register', async (req, res) => {
+  const {
+    first_name,
+    last_name,
+    email,
+    country,
+    city,
+    address,
+    password,
+  } = req.body
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    db.run(
+      `INSERT INTO users
+      (first_name, last_name, email, country, city, address, password)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        first_name,
+        last_name,
+        email,
+        country,
+        city,
+        address,
+        hashedPassword,
+      ],
+      function (err) {
+        if (err) {
+          return res.status(400).json({
+            success: false,
+            error: 'Email already exists',
+          })
+        }
+
+        res.json({
+          success: true,
+          message: 'Account created successfully',
+          userId: this.lastID,
+        })
+      }
+    )
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Server error',
+    })
+  }
+})
+
+// ================= LOGIN =================
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body
+
+  db.get(
+    'SELECT * FROM users WHERE email = ?',
+    [email],
+    async (err, user) => {
+      if (err || !user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid email or password',
+        })
+      }
+
+      const validPassword = await bcrypt.compare(
+        password,
+        user.password
+      )
+
+      if (!validPassword) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid email or password',
+        })
+      }
+
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+        },
+      })
     }
-
-    res.json({ balance: row.balance })
-  })
+  )
 })
 
-// All transactions
-app.get('/api/transactions', (req, res) => {
+// ================= GET ALL USERS =================
+app.get('/api/users', (req, res) => {
   db.all(
-    'SELECT * FROM transactions ORDER BY created_at DESC',
+    `SELECT
+      id,
+      first_name,
+      last_name,
+      email,
+      country,
+      city,
+      created_at
+     FROM users
+     ORDER BY id DESC`,
     (err, rows) => {
       if (err) {
-        return res.status(500).json({ error: err.message })
+        return res.status(500).json({
+          success: false,
+          error: err.message,
+        })
       }
 
       res.json(rows)
@@ -63,70 +146,27 @@ app.get('/api/transactions', (req, res) => {
   )
 })
 
-// Deposit
-app.post('/api/deposit', (req, res) => {
-  const { amount, method } = req.body
-
-  if (!amount || amount <= 0) {
-    return res.status(400).json({ error: 'Invalid amount' })
-  }
-
-  db.run(
-    'INSERT INTO transactions (type, amount, method) VALUES (?, ?, ?)',
-    ['deposit', amount, method || 'Bank Transfer'],
-    function (err) {
+// ================= USER COUNT =================
+app.get('/api/stats/users', (req, res) => {
+  db.get(
+    'SELECT COUNT(*) as total FROM users',
+    (err, row) => {
       if (err) {
-        return res.status(500).json({ error: err.message })
+        return res.status(500).json({
+          success: false,
+          error: err.message,
+        })
       }
 
-      db.run(
-        'UPDATE users SET balance = balance + ? WHERE id = 1',
-        [amount],
-        () => {
-          res.json({
-            success: true,
-            message: 'Deposit successful',
-            amount
-          })
-        }
-      )
+      res.json({
+        success: true,
+        totalUsers: row.total,
+      })
     }
   )
 })
 
-// Withdraw
-app.post('/api/withdraw', (req, res) => {
-  const { amount, method } = req.body
-
-  if (!amount || amount <= 0) {
-    return res.status(400).json({ error: 'Invalid amount' })
-  }
-
-  db.get('SELECT balance FROM users WHERE id = 1', (err, user) => {
-    if (user.balance < amount) {
-      return res.status(400).json({ error: 'Insufficient balance' })
-    }
-
-    db.run(
-      'INSERT INTO transactions (type, amount, method) VALUES (?, ?, ?)',
-      ['withdrawal', amount, method || 'Bank Transfer'],
-      function () {
-        db.run(
-          'UPDATE users SET balance = balance - ? WHERE id = 1',
-          [amount],
-          () => {
-            res.json({
-              success: true,
-              message: 'Withdrawal successful',
-              amount
-            })
-          }
-        )
-      }
-    )
-  })
-})
-
-app.listen(PORT, () => {
-  console.log(`🚀 NexaFunds API running at http://localhost:${PORT}`)
+// ================= START SERVER =================
+app.listen(4000, () => {
+  console.log('NexaFunds backend running on http://localhost:4000')
 })
