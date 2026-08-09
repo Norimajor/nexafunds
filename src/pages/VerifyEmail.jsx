@@ -110,8 +110,20 @@ export default function VerifyEmail() {
       }
 
       setMessageType('success')
-      setMessage('Verification code sent. Check your inbox.')
-      setOtp(Array(OTP_LENGTH).fill(''))
+
+      if (data.code) {
+        const nextOtp = Array(OTP_LENGTH).fill('')
+        data.code.split('').forEach((digit, index) => {
+          if (index < OTP_LENGTH) nextOtp[index] = digit
+        })
+
+        setOtp(nextOtp)
+        setMessage(`Verification code generated in local mode: ${data.code}`)
+      } else {
+        setMessage('Verification code sent. Check your inbox.')
+        setOtp(Array(OTP_LENGTH).fill(''))
+      }
+
       setCanResend(false)
       setCountdown(RESEND_SECONDS)
     } catch (error) {
