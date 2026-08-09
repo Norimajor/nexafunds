@@ -6,7 +6,7 @@ export default function Dashboard() {
   const [totalUsers, setTotalUsers] = useState(0)
 
 useEffect(() => {
-  fetch('http://localhost:4000/api/stats/users')
+ fetch('https://nexafunds.onrender.com/api/stats/users')
     .then((res) => res.json())
     .then((data) => setTotalUsers(data.totalUsers))
     .catch((err) => console.error(err))
