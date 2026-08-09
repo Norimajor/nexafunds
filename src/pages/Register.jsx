@@ -6,19 +6,17 @@ import ReactCountryFlag from 'react-country-flag'
 
 export default function Register() {
   const navigate = useNavigate()
-
   const options = useMemo(() => countryList().getData(), [])
+
   const [country, setCountry] = useState(null)
-
   const [firstName, setFirstName] = useState('')
-const [lastName, setLastName] = useState('')
-const [email, setEmail] = useState('')
-const [city, setCity] = useState('')
-const [address, setAddress] = useState('')
-const [password, setPassword] = useState('')
-const [confirmPassword, setConfirmPassword] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [city, setCity] = useState('')
+  const [address, setAddress] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
-  // Password strength checker
   const getStrength = (pwd) => {
     let score = 0
 
@@ -35,10 +33,50 @@ const [confirmPassword, setConfirmPassword] = useState('')
 
   const strength = getStrength(password)
 
+  const handleCreateAccount = () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      alert('Please enter your first and last name.')
+      return
+    }
+
+    if (!email.trim()) {
+      alert('Please enter your email address.')
+      return
+    }
+
+    if (!city.trim() || !address.trim()) {
+      alert('Please fill in your city and address.')
+      return
+    }
+
+    if (!password) {
+      alert('Please enter a password.')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      alert('Passwords do not match.')
+      return
+    }
+
+    navigate('/verify-email', {
+      state: {
+        formData: {
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          country: country?.searchLabel || '',
+          city,
+          address,
+          password,
+        },
+      },
+    })
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-2xl bg-white rounded-3xl shadow-xl p-8">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl mx-auto mb-4">
             N
@@ -49,58 +87,55 @@ const [confirmPassword, setConfirmPassword] = useState('')
           </h1>
 
           <p className="text-gray-500 mt-2">
-            Register to access the NexaFunds investor portal
+            Enter your details, then verify your email to complete registration.
           </p>
         </div>
 
-        <form className="space-y-5">
-          {/* First & Last Name */}
+        <div className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 First Name
               </label>
 
-             <input
-  type="text"
-  value={firstName}
-  onChange={(e) => setFirstName(e.target.value)}
-  placeholder="John"
-  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-/>
-              
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="John"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Last Name
               </label>
-<input
-  type="text"
-  value={lastName}
-  onChange={(e) => setLastName(e.target.value)}
-  placeholder="Doe"
-  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-/>
-              
+
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Doe"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
             </div>
           </div>
 
-          {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Email Address
             </label>
-<input
-  type="email"
-  value={email}
-  onChange={(e) => setEmail(e.target.value)}
-  placeholder="you@example.com"
-  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-/>
+
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
           </div>
 
-          {/* Country & City */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -115,12 +150,8 @@ const [confirmPassword, setConfirmPassword] = useState('')
                       <ReactCountryFlag
                         countryCode={c.value}
                         svg
-                        style={{
-                          width: '1.5em',
-                          height: '1.5em',
-                        }}
+                        style={{ width: '1.5em', height: '1.5em' }}
                       />
-
                       <span>{c.label}</span>
                     </div>
                   ),
@@ -155,32 +186,31 @@ const [confirmPassword, setConfirmPassword] = useState('')
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 City
               </label>
-<input
-  type="text"
-  value={city}
-  onChange={(e) => setCity(e.target.value)}
-  placeholder="Nairobi"
-  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-/>
+
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Nairobi"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
             </div>
           </div>
 
-          {/* Postal Address */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Postal Address
             </label>
 
-          <textarea
-  rows="3"
-  value={address}
-  onChange={(e) => setAddress(e.target.value)}
-  placeholder="P.O. Box 12345, Nairobi, Kenya"
-  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
-/>
+            <textarea
+              rows="3"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="P.O. Box 12345, Nairobi, Kenya"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+            />
           </div>
 
-          {/* Password */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Password
@@ -194,7 +224,6 @@ const [confirmPassword, setConfirmPassword] = useState('')
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
 
-            {/* Strength bar */}
             <div className="mt-3">
               <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div
@@ -217,7 +246,6 @@ const [confirmPassword, setConfirmPassword] = useState('')
             </div>
           </div>
 
-          {/* Confirm Password */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Confirm Password
@@ -242,7 +270,6 @@ const [confirmPassword, setConfirmPassword] = useState('')
             )}
           </div>
 
-          {/* Terms */}
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -258,51 +285,15 @@ const [confirmPassword, setConfirmPassword] = useState('')
             </p>
           </div>
 
-          {/* Submit */}
-       <button
-  type="button"
-  disabled={password !== confirmPassword || !password}
-  onClick={async () => {
-    try {
-      const response = await fetch('https://nexafunds.onrender.com/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          first_name: firstName,
-          last_name: lastName,
-          email,
-          country: country?.searchLabel || '',
-          city,
-          address,
-          password,
-        }),
-      })
+          <button
+            type="button"
+            onClick={handleCreateAccount}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold transition"
+          >
+            Create Account
+          </button>
+        </div>
 
-      const data = await response.json()
-
-      if (data.success) {
-        alert('Account created successfully!')
-        navigate('/login')
-      } else {
-        alert(data.error)
-      }
-    } catch (err) {
-      alert('Unable to connect to backend server')
-    }
-  }}
-  className={`w-full py-3 rounded-xl font-semibold transition ${
-    password === confirmPassword && password
-      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-  }`}
->
-  Create Investor Account
-</button>
-        </form>
-
-        {/* Login Link */}
         <div className="text-center mt-6">
           <p className="text-sm text-gray-500">
             Already have an account?{' '}

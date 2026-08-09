@@ -2,10 +2,16 @@ import express from 'express'
 import cors from 'cors'
 import sqlite3 from 'sqlite3'
 import bcrypt from 'bcrypt'
+import dotenv from 'dotenv'
+import { Resend } from 'resend'
+
+dotenv.config()
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 const app = express()
 const db = new sqlite3.Database('./database.db')
-
+const pendingVerifications = new Map()
 app.use(cors())
 app.use(express.json())
 
@@ -28,6 +34,97 @@ db.run(`
 app.get('/', (req, res) => {
   res.send('NexaFunds backend is running')
 })
+// ================= SEND VERIFICATION CODE =================
+app.post('/api/send-code', async (req, res) => {
+  const { email } = req.body
+
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email is required',
+    })
+  }
+
+  const code = Math.floor(
+    100000 + Math.random() * 900000
+  ).toString()
+
+  pendingVerifications.set(email, {
+    code,
+    verified: false,
+    expires: Date.now() + 10 * 60 * 1000,
+  })
+
+  try {
+    await resend.emails.send({
+      from: 'NexaFunds <onboarding@resend.dev>',
+      to: email,
+      subject: 'Your NexaFunds verification code',
+      html: `
+        <h2>NexaFunds Email Verification</h2>
+        <p>Your verification code is:</p>
+        <h1 style="font-size:36px;color:#2563eb;">${code}</h1>
+        <p>This code expires in 10 minutes.</p>
+      `,
+    })
+
+    res.json({
+      success: true,
+      message: 'Verification code sent',
+    })
+  } catch (error) {
+    console.error(error)
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send email',
+    })
+  }
+})
+
+// ================= VERIFY CODE =================
+app.post('/api/verify-code', (req, res) => {
+  const { email, code } = req.body
+
+  if (!email || !code) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email and verification code are required',
+    })
+  }
+
+  const verification = pendingVerifications.get(email)
+
+  if (!verification) {
+    return res.status(400).json({
+      success: false,
+      error: 'No verification request found for this email',
+    })
+  }
+
+  if (Date.now() > verification.expires) {
+    pendingVerifications.delete(email)
+    return res.status(400).json({
+      success: false,
+      error: 'Verification code has expired',
+    })
+  }
+
+  if (verification.code !== code.toString()) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid verification code',
+    })
+  }
+
+  verification.verified = true
+  pendingVerifications.set(email, verification)
+
+  res.json({
+    success: true,
+    message: 'Email verified successfully',
+  })
+})
 
 // ================= REGISTER =================
 app.post('/api/register', async (req, res) => {
@@ -40,6 +137,15 @@ app.post('/api/register', async (req, res) => {
     address,
     password,
   } = req.body
+
+  const verification = pendingVerifications.get(email)
+
+  if (!verification || !verification.verified) {
+    return res.status(400).json({
+      success: false,
+      error: 'Please verify your email before creating an account',
+    })
+  }
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10)
@@ -59,12 +165,14 @@ app.post('/api/register', async (req, res) => {
       ],
       function (err) {
         if (err) {
+          pendingVerifications.delete(email)
           return res.status(400).json({
             success: false,
             error: 'Email already exists',
           })
         }
 
+        pendingVerifications.delete(email)
         res.json({
           success: true,
           message: 'Account created successfully',
