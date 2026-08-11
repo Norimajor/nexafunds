@@ -570,10 +570,13 @@ app.get(
 
 app.get(
   '/api/stats/users',
-  requireAdmin,
   asyncRoute(async (req, res) => {
     const row = await get(db, 'SELECT COUNT(*) AS total FROM users')
-    res.json({ success: true, totalUsers: row.total })
+
+    res.json({
+      success: true,
+      totalUsers: row.total || 0,
+    })
   })
 )
 
