@@ -42,7 +42,6 @@ export default function Dashboard() {
   const [eaSettings, setEaSettings] = useState(defaultSettings)
   const [totalUsers, setTotalUsers] = useState(0)
   const [positions, setPositions] = useState([])
-
   useEffect(() => {
     document.documentElement.style.colorScheme = theme
     localStorage.setItem('nexafunds-theme', theme)
@@ -348,7 +347,31 @@ const response = await fetch(`${API_BASE}/api/stats/users`)
               </div>
             </div>
           </header>
+         <div
+  className={
+    isDark
+      ? 'rounded-[28px] border border-slate-800/90 bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950 p-6 shadow-[0_25px_60px_rgba(15,23,42,0.45)]'
+      : 'rounded-[28px] border border-slate-200 bg-gradient-to-r from-white via-sky-50 to-emerald-50 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.08)]'
+  }
+>
+  <h2 className="text-2xl font-bold">
+    Obed, welcome to NexaFunds 👋
+  </h2>
 
+  <p
+    className={
+      isDark
+        ? 'mt-3 text-sm text-slate-300'
+        : 'mt-3 text-sm text-slate-600'
+    }
+  >
+    Obed, welcome to <span className="font-semibold text-sky-500">NexaFunds</span>,
+    where you get to interact with <span className="font-semibold text-emerald-500">
+      {totalUsers} active {totalUsers === 1 ? 'trader' : 'traders'}
+    </span>
+    and follow live portfolio performance as our trading community grows.
+  </p>
+</div>
           <div className="space-y-6 px-4 py-6 sm:px-6">
             <section className="grid gap-5 xl:grid-cols-[1.6fr_0.8fr]">
               <div
