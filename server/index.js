@@ -581,7 +581,6 @@ app.get(
 
 app.get(
   '/api/mt5/account',
-  requireAuth,
   asyncRoute(async (req, res) => {
     const account = await get(
       mt5db,
@@ -598,7 +597,6 @@ app.get(
 
 app.get(
   '/api/mt5/positions',
-  requireAuth,
   asyncRoute(async (req, res) => {
     const positions = await all(
       mt5db,

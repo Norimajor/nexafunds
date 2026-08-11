@@ -98,7 +98,7 @@ export default function Dashboard() {
 
     const fetchTotalUsers = async () => {
       try {
-        const response = await fetch('https://nexafunds.onrender.com/api/stats/users')
+const response = await fetch(`${API_BASE}/api/stats/users`)
         const data = await response.json()
         if (cancelled) return
         setTotalUsers(data.totalUsers || 0)
