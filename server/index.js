@@ -560,7 +560,83 @@ app.get('/api/mt5/positions', (req, res) => {
     }
   )
 })
+// ================= RECEIVE LIVE MT5 DATA =================
+app.post('/api/mt5/update', (req, res) => {
+  const { account, positions } = req.body
 
+  if (!account) {
+    return res.status(400).json({
+      success: false,
+      error: 'Account data is required',
+    })
+  }
+
+  // Save account
+  mt5db.run('DELETE FROM mt5_account', [], (deleteErr) => {
+    if (deleteErr) {
+      return res.status(500).json({
+        success: false,
+        error: deleteErr.message,
+      })
+    }
+
+    mt5db.run(
+      `INSERT INTO mt5_account
+      (login, balance, equity, profit, margin, free_margin, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        account.login,
+        account.balance,
+        account.equity,
+        account.profit,
+        account.margin,
+        account.free_margin,
+      ],
+      (insertErr) => {
+        if (insertErr) {
+          return res.status(500).json({
+            success: false,
+            error: insertErr.message,
+          })
+        }
+
+        // Save positions
+        mt5db.run('DELETE FROM mt5_positions', [], (posDeleteErr) => {
+          if (posDeleteErr) {
+            return res.status(500).json({
+              success: false,
+              error: posDeleteErr.message,
+            })
+          }
+
+          if (positions && positions.length) {
+            positions.forEach((p) => {
+              mt5db.run(
+                `INSERT INTO mt5_positions
+                (ticket, symbol, type, volume, price_open, current_price, profit, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+                [
+                  p.ticket,
+                  p.symbol,
+                  p.type,
+                  p.volume,
+                  p.price_open,
+                  p.current_price,
+                  p.profit,
+                ]
+              )
+            })
+          }
+
+          res.json({
+            success: true,
+            message: 'MT5 data updated successfully',
+          })
+        })
+      }
+    )
+  })
+})
 // ================= START SERVER =================
 const PORT = process.env.PORT || 4000
 
