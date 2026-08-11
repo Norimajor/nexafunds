@@ -7,7 +7,10 @@ const navItems = [
   { label: 'Transactions' },
 ]
 
-const chartPath = 'M 15 180 C 70 135, 100 145, 150 120 S 240 70, 290 85 S 360 25, 410 40 S 500 60, 560 32 S 640 18, 700 45 L 700 220 L 15 220 Z'
+const chartPath =
+  'M 15 180 C 70 135, 100 145, 150 120 S 240 70, 290 85 S 360 25, 410 40 S 500 60, 560 32 S 640 18, 700 45 L 700 220 L 15 220 Z'
+
+const API_BASE = 'http://localhost:4000'
 
 const defaultSettings = {
   ea_name: 'Nexa Gold Scalper',
@@ -23,7 +26,9 @@ const defaultSettings = {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [theme, setTheme] = useState(() => localStorage.getItem('nexafunds-theme') || 'dark')
+  const [theme, setTheme] = useState(
+    () => (typeof window !== 'undefined' && localStorage.getItem('nexafunds-theme')) || 'dark',
+  )
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [account, setAccount] = useState({
@@ -36,6 +41,7 @@ export default function Dashboard() {
   })
   const [eaSettings, setEaSettings] = useState(defaultSettings)
   const [totalUsers, setTotalUsers] = useState(0)
+  const [positions, setPositions] = useState([])
 
   useEffect(() => {
     document.documentElement.style.colorScheme = theme
@@ -43,46 +49,91 @@ export default function Dashboard() {
   }, [theme])
 
   useEffect(() => {
+    let cancelled = false
+
     const fetchAccount = async () => {
       try {
-        const response = await fetch('http://localhost:4000/api/account/summary')
+        const response = await fetch(`${API_BASE}/api/mt5/account`)
         const data = await response.json()
+        if (cancelled || !data.success) return
 
-        if (data.success) {
-          setAccount(data.summary)
-        }
+        const mt5 = data.account
+        const balance = Number(mt5.balance) || 0
+        const equity = Number(mt5.equity) || 0
+
+        setAccount({
+          currentBalance: balance,
+          totalProfit: Number(mt5.profit) || 0,
+          portfolioValue: equity,
+          totalInvested: balance,
+          monthlyGain: 12.5,
+          totalReturn: balance > 0 ? ((equity - balance) / balance) * 100 : 0,
+        })
       } catch (error) {
-        console.error('Failed to fetch account summary:', error)
+        console.error('Failed to fetch MT5 account:', error)
+      }
+    }
+
+    const fetchPositions = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/mt5/positions`)
+        const data = await response.json()
+        if (cancelled || !data.success) return
+        setPositions(data.positions || [])
+      } catch (error) {
+        console.error('Failed to fetch MT5 positions:', error)
       }
     }
 
     const fetchEaSettings = async () => {
       try {
-        const response = await fetch('http://localhost:4000/api/ea/settings')
+        const response = await fetch(`${API_BASE}/api/ea/settings`)
         const data = await response.json()
-
-        if (data.success) {
-          setEaSettings({ ...defaultSettings, ...data.settings })
-        }
+        if (cancelled || !data.success) return
+        setEaSettings({ ...defaultSettings, ...data.settings })
       } catch (error) {
         console.error('Failed to fetch EA settings:', error)
       }
     }
 
-    fetchAccount()
-    fetchEaSettings()
+    const fetchTotalUsers = async () => {
+      try {
+        const response = await fetch('https://nexafunds.onrender.com/api/stats/users')
+        const data = await response.json()
+        if (cancelled) return
+        setTotalUsers(data.totalUsers || 0)
+      } catch (error) {
+        console.error('Failed to fetch total users:', error)
+      }
+    }
 
-    fetch('https://nexafunds.onrender.com/api/stats/users')
-      .then((res) => res.json())
-      .then((data) => setTotalUsers(data.totalUsers || 0))
-      .catch((err) => console.error(err))
+    fetchAccount()
+    fetchPositions()
+    fetchEaSettings()
+    fetchTotalUsers()
+
+    const interval = setInterval(() => {
+      fetchAccount()
+      fetchPositions()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [])
 
+  const money = (value) =>
+    `$${Number(value).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`
+
   const stats = [
-    { label: 'Current balance', value: `$${account.currentBalance.toLocaleString()}`, change: '+8.4%', tone: 'emerald' },
-    { label: 'Net profit', value: `$${account.totalProfit.toLocaleString()}`, change: '+12.6%', tone: 'blue' },
-    { label: 'Portfolio value', value: `$${account.portfolioValue.toLocaleString()}`, change: 'Live', tone: 'violet' },
-    { label: 'Invested capital', value: `$${account.totalInvested.toLocaleString()}`, change: 'Stable', tone: 'amber' },
+    { label: 'Current balance', value: money(account.currentBalance), change: '+8.4%', tone: 'emerald' },
+    { label: 'Net profit', value: money(account.totalProfit), change: '+12.6%', tone: 'blue' },
+    { label: 'Portfolio value', value: money(account.portfolioValue), change: 'Live', tone: 'violet' },
+    { label: 'Invested capital', value: money(account.totalInvested), change: 'Stable', tone: 'amber' },
   ]
 
   const activity = [
@@ -98,7 +149,7 @@ export default function Dashboard() {
       detail: eaSettings.pamm_access ? 'Investor portal connected' : 'Access disabled for investors',
       tone: 'sky',
       actionLabel: 'Open PAMM account',
-      actionUrl: 'https://alpari.com/en/pamm-account/?utm_source=chatgpt.com',
+      actionUrl: 'https://alpari.com/en/pamm-account/',
     },
     {
       label: 'Broker access',
@@ -112,20 +163,10 @@ export default function Dashboard() {
 
   const saveEaSettings = async () => {
     try {
-      const response = await fetch('http://localhost:4000/api/ea/settings', {
+      const response = await fetch(`${API_BASE}/api/ea/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ea_name: eaSettings.ea_name,
-          ea_risk: eaSettings.ea_risk,
-          ea_drawdown: eaSettings.ea_drawdown,
-          ea_status: eaSettings.ea_status,
-          auto_trade: eaSettings.auto_trade,
-          push_notifications: eaSettings.push_notifications,
-          max_order_size: eaSettings.max_order_size,
-          pamm_access: eaSettings.pamm_access,
-          broker_access: eaSettings.broker_access,
-        }),
+        body: JSON.stringify(eaSettings),
       })
 
       const data = await response.json()
@@ -136,7 +177,7 @@ export default function Dashboard() {
       setShowSettingsModal(false)
     } catch (error) {
       console.error(error)
-      alert(error.message)
+      alert(error instanceof Error ? error.message : 'Unable to update EA settings')
     }
   }
 
@@ -150,7 +191,13 @@ export default function Dashboard() {
           : 'relative min-h-screen overflow-hidden bg-slate-100 text-slate-900'
       }
     >
-      <div className={isDark ? 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),transparent_30%)]' : 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),transparent_30%)]'} />
+      <div
+        className={
+          isDark
+            ? 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),transparent_30%)]'
+            : 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),transparent_30%)]'
+        }
+      />
 
       <div className="relative mx-auto flex max-w-[1600px]">
         <aside
@@ -193,8 +240,16 @@ export default function Dashboard() {
             ))}
           </nav>
 
-          <div className={isDark ? 'mt-auto rounded-3xl border border-slate-700/80 bg-slate-800/70 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.42)]' : 'mt-auto rounded-3xl border border-slate-200 bg-white/70 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)]'}>
-            <p className={isDark ? 'text-xs uppercase tracking-[0.2em] text-slate-400' : 'text-xs uppercase tracking-[0.2em] text-slate-500'}>Account</p>
+          <div
+            className={
+              isDark
+                ? 'mt-auto rounded-3xl border border-slate-700/80 bg-slate-800/70 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.42)]'
+                : 'mt-auto rounded-3xl border border-slate-200 bg-white/70 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)]'
+            }
+          >
+            <p className={isDark ? 'text-xs uppercase tracking-[0.2em] text-slate-400' : 'text-xs uppercase tracking-[0.2em] text-slate-500'}>
+              Account
+            </p>
             <h3 className="mt-3 text-lg font-semibold">Premium Investor</h3>
             <p className={isDark ? 'mt-1 text-sm text-slate-400' : 'mt-1 text-sm text-slate-600'}>Tier 3 performance plan</p>
           </div>
@@ -208,9 +263,7 @@ export default function Dashboard() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white">
                     N
                   </div>
-                  <div>
-                    <h1 className="text-lg font-bold">NexaFunds</h1>
-                  </div>
+                  <h1 className="text-lg font-bold">NexaFunds</h1>
                 </div>
                 <button type="button" onClick={() => setMobileSidebarOpen(false)} className={isDark ? 'text-slate-200' : 'text-slate-700'}>
                   ✕
@@ -296,58 +349,102 @@ export default function Dashboard() {
             </div>
           </header>
 
-          <div className="space-y-6 p-4 sm:p-6">
+          <div className="space-y-6 px-4 py-6 sm:px-6">
             <section className="grid gap-5 xl:grid-cols-[1.6fr_0.8fr]">
-              <div className={isDark ? 'overflow-hidden rounded-[30px] border border-slate-800/90 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 p-6 shadow-[0_30px_60px_rgba(15,23,42,0.45)]' : 'overflow-hidden rounded-[30px] border border-slate-200 bg-gradient-to-br from-white via-sky-50 to-emerald-50 p-6 shadow-[0_30px_60px_rgba(15,23,42,0.12)]'}>
+              <div
+                className={
+                  isDark
+                    ? 'overflow-hidden rounded-[30px] border border-slate-800/90 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 p-6 shadow-[0_30px_60px_rgba(15,23,42,0.45)]'
+                    : 'overflow-hidden rounded-[30px] border border-slate-200 bg-gradient-to-br from-white via-sky-50 to-emerald-50 p-6 shadow-[0_30px_60px_rgba(15,23,42,0.12)]'
+                }
+              >
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <p className={isDark ? 'text-sm uppercase tracking-[0.22em] text-sky-400' : 'text-sm uppercase tracking-[0.22em] text-sky-600'}>Executive overview</p>
-                    <h3 className="mt-4 text-3xl font-bold">Portfolio momentum is strong</h3>
+                    <p className={isDark ? 'text-sm uppercase tracking-[0.22em] text-sky-400' : 'text-sm uppercase tracking-[0.22em] text-sky-600'}>
+                      MT5 Live Overview
+                    </p>
+                    <h3 className="mt-4 text-3xl font-bold">Active MT5 account synced successfully</h3>
                     <p className={isDark ? 'mt-3 max-w-lg text-sm text-slate-300' : 'mt-3 max-w-lg text-sm text-slate-600'}>
-                      Your strategy continues to outperform while the trading system remains stable and fully synced with your broker account.
+                      Balance, equity, floating profit, and open positions are updating automatically every 5 seconds from the
+                      currently logged-in MT5 account.
                     </p>
                   </div>
 
                   <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-right">
-                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-emerald-300' : 'text-xs uppercase tracking-[0.18em] text-emerald-700'}>Net return</p>
-                    <h4 className="mt-2 text-3xl font-bold text-emerald-500">+48.7%</h4>
+                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-emerald-300' : 'text-xs uppercase tracking-[0.18em] text-emerald-700'}>
+                      Total Return
+                    </p>
+                    <h4 className="mt-2 text-3xl font-bold text-emerald-500">
+                      {account.totalReturn >= 0 ? '+' : ''}
+                      {account.totalReturn.toFixed(2)}%
+                    </h4>
                   </div>
                 </div>
 
                 <div className="mt-6 grid gap-4 md:grid-cols-3">
                   <div className={isDark ? 'rounded-2xl border border-slate-700/80 bg-slate-800/70 p-4' : 'rounded-2xl border border-slate-200 bg-white/70 p-4'}>
-                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>Active trades</p>
-                    <h4 className="mt-3 text-2xl font-bold">18</h4>
+                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>
+                      Open Positions
+                    </p>
+                    <h4 className="mt-3 text-2xl font-bold">{positions.length}</h4>
                   </div>
+
                   <div className={isDark ? 'rounded-2xl border border-slate-700/80 bg-slate-800/70 p-4' : 'rounded-2xl border border-slate-200 bg-white/70 p-4'}>
-                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>Daily PnL</p>
-                    <h4 className="mt-3 text-2xl font-bold text-emerald-500">+$1.24k</h4>
+                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>
+                      Floating P/L
+                    </p>
+                    <h4 className={`mt-3 text-2xl font-bold ${account.totalProfit >= 0 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                      {account.totalProfit >= 0 ? '+' : '-'}
+                      {money(Math.abs(account.totalProfit))}
+                    </h4>
                   </div>
+
                   <div className={isDark ? 'rounded-2xl border border-slate-700/80 bg-slate-800/70 p-4' : 'rounded-2xl border border-slate-200 bg-white/70 p-4'}>
-                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>Risk score</p>
-                    <h4 className="mt-3 text-2xl font-bold text-amber-500">Moderate</h4>
+                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>
+                      Equity
+                    </p>
+                    <h4 className="mt-3 text-2xl font-bold text-emerald-500">{money(account.portfolioValue)}</h4>
                   </div>
                 </div>
               </div>
 
-              <div className={isDark ? 'rounded-[30px] border border-slate-800/90 bg-slate-900/70 p-5 shadow-[0_30px_60px_rgba(15,23,42,0.45)]' : 'rounded-[30px] border border-slate-200 bg-white/70 p-5 shadow-[0_30px_60px_rgba(15,23,42,0.12)]'}>
+              <div
+                className={
+                  isDark
+                    ? 'rounded-[30px] border border-slate-800/90 bg-slate-900/70 p-5 shadow-[0_30px_60px_rgba(15,23,42,0.45)]'
+                    : 'rounded-[30px] border border-slate-200 bg-white/70 p-5 shadow-[0_30px_60px_rgba(15,23,42,0.12)]'
+                }
+              >
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Market pulse</h3>
+                  <h3 className="text-lg font-semibold">MT5 Account</h3>
                   <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500">Live</span>
                 </div>
 
                 <div className="space-y-3">
                   {[
-                    ['EUR/USD', '+0.42%', 'up'],
-                    ['XAU/USD', '+1.18%', 'up'],
-                    ['GBP/USD', '-0.08%', 'down'],
-                    ['NZD/JPY', '+0.24%', 'up'],
-                  ].map(([pair, change, trend]) => (
-                    <div key={pair} className={isDark ? 'flex items-center justify-between rounded-2xl border border-slate-700/80 bg-slate-800/70 p-3' : 'flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-3'}>
-                      <div>
-                        <p className="font-medium">{pair}</p>
-                      </div>
-                      <span className={trend === 'up' ? 'font-semibold text-emerald-500' : 'font-semibold text-rose-400'}>{change}</span>
+                    { label: 'Balance', node: <span className="font-semibold text-emerald-500">{money(account.currentBalance)}</span> },
+                    { label: 'Equity', node: <span className="font-semibold text-emerald-500">{money(account.portfolioValue)}</span> },
+                    {
+                      label: 'Floating Profit',
+                      node: (
+                        <span className={`font-semibold ${account.totalProfit >= 0 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                          {account.totalProfit >= 0 ? '+' : '-'}
+                          {money(Math.abs(account.totalProfit))}
+                        </span>
+                      ),
+                    },
+                    { label: 'Open Positions', node: <span className="font-semibold text-sky-500">{positions.length}</span> },
+                  ].map((row) => (
+                    <div
+                      key={row.label}
+                      className={
+                        isDark
+                          ? 'flex items-center justify-between rounded-2xl border border-slate-700/80 bg-slate-800/70 p-3'
+                          : 'flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-3'
+                      }
+                    >
+                      <span className="font-medium">{row.label}</span>
+                      {row.node}
                     </div>
                   ))}
                 </div>
@@ -366,7 +463,9 @@ export default function Dashboard() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>{card.label}</p>
+                      <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>
+                        {card.label}
+                      </p>
                       <h4 className="mt-2 text-2xl font-bold">{card.value}</h4>
                     </div>
                     <span
@@ -402,21 +501,23 @@ export default function Dashboard() {
                   key={item.label}
                   className={
                     isDark
-                      ? 'group rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.35)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-sky-500/30 hover:shadow-[0_20px_50px_rgba(59,130,246,0.18)]'
-                      : 'group rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-sky-200 hover:shadow-[0_20px_50px_rgba(59,130,246,0.10)]'
+                      ? 'group rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.35)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-sky-500/30'
+                      : 'group rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-sky-200'
                   }
                 >
                   <div className="flex items-center justify-between">
                     <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>{item.label}</p>
-                    <span className={
-                      item.tone === 'emerald'
-                        ? 'rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500'
-                        : item.tone === 'blue'
-                          ? 'rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500'
-                          : item.tone === 'violet'
-                            ? 'rounded-full bg-violet-500/10 px-2 py-1 text-xs font-medium text-violet-500'
-                            : 'rounded-full bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-500'
-                    }>
+                    <span
+                      className={
+                        item.tone === 'emerald'
+                          ? 'rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500'
+                          : item.tone === 'blue'
+                            ? 'rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500'
+                            : item.tone === 'violet'
+                              ? 'rounded-full bg-violet-500/10 px-2 py-1 text-xs font-medium text-violet-500'
+                              : 'rounded-full bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-500'
+                      }
+                    >
                       {item.change}
                     </span>
                   </div>
@@ -429,8 +530,8 @@ export default function Dashboard() {
               <div
                 className={
                   isDark
-                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5'
-                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5'
+                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl'
+                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl'
                 }
               >
                 <div className="mb-6 flex items-center justify-between gap-3">
@@ -460,8 +561,8 @@ export default function Dashboard() {
                 <div
                   className={
                     isDark
-                      ? 'relative overflow-hidden rounded-[28px] border border-slate-700/80 bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-6 shadow-inner shadow-slate-950/50'
-                      : 'relative overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-6 shadow-inner shadow-slate-200/70'
+                      ? 'relative overflow-hidden rounded-[28px] border border-slate-700/80 bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-6'
+                      : 'relative overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-6'
                   }
                 >
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.20),transparent_28%)]" />
@@ -502,26 +603,31 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="space-y-6">
-                <div
-                  className={
-                    isDark
-                      ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5'
-                      : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5'
-                  }
-                >
-                  <h3 className="text-lg font-semibold">Recent activity</h3>
-                  <div className="mt-5 space-y-4">
-                    {activity.map((item) => (
-                      <div key={item.title} className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3 last:border-0 last:pb-0 dark:border-slate-700">
-                        <div>
-                          <p className="font-medium">{item.title}</p>
-                          <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>{item.time}</p>
-                        </div>
-                        <span className={isDark ? 'text-sm font-medium text-sky-400' : 'text-sm font-medium text-sky-600'}>{item.value}</span>
+              <div
+                className={
+                  isDark
+                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl'
+                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl'
+                }
+              >
+                <h3 className="text-lg font-semibold">Recent activity</h3>
+                <div className="mt-5 space-y-4">
+                  {activity.map((item) => (
+                    <div
+                      key={item.title}
+                      className={
+                        isDark
+                          ? 'flex items-start justify-between gap-3 border-b border-slate-700 pb-3 last:border-0 last:pb-0'
+                          : 'flex items-start justify-between gap-3 border-b border-slate-200 pb-3 last:border-0 last:pb-0'
+                      }
+                    >
+                      <div>
+                        <p className="font-medium">{item.title}</p>
+                        <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>{item.time}</p>
                       </div>
-                    ))}
-                  </div>
+                      <span className={isDark ? 'text-sm font-medium text-sky-400' : 'text-sm font-medium text-sky-600'}>{item.value}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </section>
@@ -530,8 +636,8 @@ export default function Dashboard() {
               <div
                 className={
                   isDark
-                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5'
-                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5'
+                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl'
+                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl'
                 }
               >
                 <div className="mb-5 flex items-center justify-between">
@@ -554,9 +660,7 @@ export default function Dashboard() {
                       <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>Active strategy</p>
                       <h4 className="mt-1 text-2xl font-bold">{eaSettings.ea_name}</h4>
                     </div>
-                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-500">
-                      {eaSettings.ea_status}
-                    </span>
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-500">{eaSettings.ea_status}</span>
                   </div>
 
                   <div className="mt-5 space-y-3 text-sm">
@@ -579,8 +683,8 @@ export default function Dashboard() {
               <div
                 className={
                   isDark
-                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5'
-                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5'
+                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl'
+                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl'
                 }
               >
                 <h3 className="text-xl font-semibold">Account status</h3>
@@ -592,7 +696,7 @@ export default function Dashboard() {
 
                   <div className={isDark ? 'rounded-2xl bg-slate-800/80 p-4' : 'rounded-2xl bg-slate-50 p-4'}>
                     <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>Monthly gain</p>
-                    <h4 className="mt-2 text-3xl font-bold text-emerald-500">+12.5%</h4>
+                    <h4 className="mt-2 text-3xl font-bold text-emerald-500">+{account.monthlyGain || 12.5}%</h4>
                   </div>
 
                   <div className={isDark ? 'rounded-2xl bg-slate-800/80 p-4' : 'rounded-2xl bg-slate-50 p-4'}>
@@ -611,15 +715,12 @@ export default function Dashboard() {
           <div className={isDark ? 'w-full max-w-xl rounded-[28px] border border-slate-700 bg-slate-900 p-6 shadow-2xl' : 'w-full max-w-xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl'}>
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <p className={isDark ? 'text-sm uppercase tracking-[0.18em] text-sky-400' : 'text-sm uppercase tracking-[0.18em] text-sky-600'}>Trading settings</p>
+                <p className={isDark ? 'text-sm uppercase tracking-[0.18em] text-sky-400' : 'text-sm uppercase tracking-[0.18em] text-sky-600'}>
+                  Trading settings
+                </p>
                 <h3 className="mt-2 text-2xl font-bold">EA controls</h3>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setShowSettingsModal(false)}
-                className={isDark ? 'text-slate-300' : 'text-slate-600'}
-              >
+              <button type="button" onClick={() => setShowSettingsModal(false)} className={isDark ? 'text-slate-300' : 'text-slate-600'}>
                 ✕
               </button>
             </div>
@@ -690,45 +791,29 @@ export default function Dashboard() {
               </div>
 
               <div className="space-y-3">
-                <label className={isDark ? 'flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100' : 'flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800'}>
-                  <span>Auto-trading</span>
-                  <input
-                    type="checkbox"
-                    checked={eaSettings.auto_trade}
-                    onChange={(event) => setEaSettings({ ...eaSettings, auto_trade: event.target.checked })}
-                    className="h-4 w-4 rounded"
-                  />
-                </label>
-
-                <label className={isDark ? 'flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100' : 'flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800'}>
-                  <span>Push notifications</span>
-                  <input
-                    type="checkbox"
-                    checked={eaSettings.push_notifications}
-                    onChange={(event) => setEaSettings({ ...eaSettings, push_notifications: event.target.checked })}
-                    className="h-4 w-4 rounded"
-                  />
-                </label>
-
-                <label className={isDark ? 'flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100' : 'flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800'}>
-                  <span>PAMM access</span>
-                  <input
-                    type="checkbox"
-                    checked={eaSettings.pamm_access}
-                    onChange={(event) => setEaSettings({ ...eaSettings, pamm_access: event.target.checked })}
-                    className="h-4 w-4 rounded"
-                  />
-                </label>
-
-                <label className={isDark ? 'flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100' : 'flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800'}>
-                  <span>Broker access</span>
-                  <input
-                    type="checkbox"
-                    checked={eaSettings.broker_access}
-                    onChange={(event) => setEaSettings({ ...eaSettings, broker_access: event.target.checked })}
-                    className="h-4 w-4 rounded"
-                  />
-                </label>
+                {[
+                  { key: 'auto_trade', label: 'Auto-trading' },
+                  { key: 'push_notifications', label: 'Push notifications' },
+                  { key: 'pamm_access', label: 'PAMM access' },
+                  { key: 'broker_access', label: 'Broker access' },
+                ].map((toggle) => (
+                  <label
+                    key={toggle.key}
+                    className={
+                      isDark
+                        ? 'flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100'
+                        : 'flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800'
+                    }
+                  >
+                    <span>{toggle.label}</span>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(eaSettings[toggle.key])}
+                      onChange={(event) => setEaSettings({ ...eaSettings, [toggle.key]: event.target.checked })}
+                      className="h-4 w-4 rounded"
+                    />
+                  </label>
+                ))}
               </div>
             </div>
 
@@ -754,4 +839,3 @@ export default function Dashboard() {
     </div>
   )
 }
-

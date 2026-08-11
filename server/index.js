@@ -79,7 +79,7 @@ seedAccountDefaults()
 app.get('/', (req, res) => {
   res.send('NexaFunds backend is running')
 })
-// ================= SEND VERIFICATION CODE =================
+
 // ================= SEND VERIFICATION CODE =================
 app.post('/api/send-code', async (req, res) => {
   const { email } = req.body
@@ -93,9 +93,7 @@ app.post('/api/send-code', async (req, res) => {
 
   const normalizedEmail = email.trim().toLowerCase()
 
-  const code = Math.floor(
-    100000 + Math.random() * 900000
-  ).toString()
+  const code = Math.floor(100000 + Math.random() * 900000).toString()
 
   pendingVerifications.set(normalizedEmail, {
     code,
@@ -116,14 +114,12 @@ app.post('/api/send-code', async (req, res) => {
       to: normalizedEmail,
       subject: 'Your NexaFunds verification code',
       html: `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px">
-          <h2 style="color:#2563eb">NexaFunds Email Verification</h2>
-          <p>Your verification code is:</p>
-          <div style="font-size:36px;font-weight:bold;color:#111827;letter-spacing:4px;margin:20px 0">
-            ${code}
-          </div>
-          <p>This code expires in <strong>10 minutes</strong>.</p>
-          <p>If you did not request this code, you can safely ignore this email.</p>
+        <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #111;">
+          <h2 style="margin: 0 0 12px;">NexaFunds Email Verification</h2>
+          <p style="margin: 0 0 16px;">Your verification code is:</p>
+          <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; margin: 0 0 16px;">${code}</p>
+          <p style="margin: 0 0 8px;">This code expires in 10 minutes.</p>
+          <p style="margin: 0; color: #666; font-size: 13px;">If you did not request this code, you can safely ignore this email.</p>
         </div>
       `,
     })
@@ -144,7 +140,6 @@ app.post('/api/send-code', async (req, res) => {
   }
 })
 
-// ================= VERIFY CODE =================
 // ================= VERIFY CODE =================
 app.post('/api/verify-code', (req, res) => {
   const { email, code } = req.body
@@ -193,15 +188,14 @@ app.post('/api/verify-code', (req, res) => {
 
 // ================= REGISTER =================
 app.post('/api/register', async (req, res) => {
-  const {
-    first_name,
-    last_name,
-    email,
-    country,
-    city,
-    address,
-    password,
-  } = req.body
+  const { first_name, last_name, email, country, city, address, password } = req.body
+
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email and password are required',
+    })
+  }
 
   const normalizedEmail = email.trim().toLowerCase()
   const verification = pendingVerifications.get(normalizedEmail)
@@ -220,15 +214,7 @@ app.post('/api/register', async (req, res) => {
       `INSERT INTO users
       (first_name, last_name, email, country, city, address, password)
       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        first_name,
-        last_name,
-        normalizedEmail,
-        country,
-        city,
-        address,
-        hashedPassword,
-      ],
+      [first_name, last_name, normalizedEmail, country, city, address, hashedPassword],
       function (err) {
         if (err) {
           pendingVerifications.delete(normalizedEmail)
@@ -255,44 +241,47 @@ app.post('/api/register', async (req, res) => {
     })
   }
 })
+
 // ================= LOGIN =================
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body
 
-  db.get(
-    'SELECT * FROM users WHERE email = ?',
-    [email],
-    async (err, user) => {
-      if (err || !user) {
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid email or password',
-        })
-      }
+  if (!email || !password) {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid email or password',
+    })
+  }
 
-      const validPassword = await bcrypt.compare(
-        password,
-        user.password
-      )
+  const normalizedEmail = email.trim().toLowerCase()
 
-      if (!validPassword) {
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid email or password',
-        })
-      }
-
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          email: user.email,
-        },
+  db.get('SELECT * FROM users WHERE email = ?', [normalizedEmail], async (err, user) => {
+    if (err || !user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password',
       })
     }
-  )
+
+    const validPassword = await bcrypt.compare(password, user.password)
+
+    if (!validPassword) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password',
+      })
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+      },
+    })
+  })
 })
 
 // ================= ACCOUNT SUMMARY =================
@@ -509,9 +498,54 @@ app.get('/api/users', (req, res) => {
 
 // ================= USER COUNT =================
 app.get('/api/stats/users', (req, res) => {
-  db.get(
-    'SELECT COUNT(*) as total FROM users',
+  db.get('SELECT COUNT(*) as total FROM users', (err, row) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        error: err.message,
+      })
+    }
+
+    res.json({
+      success: true,
+      totalUsers: row.total,
+    })
+  })
+})
+
+// ================= MT5 LIVE ACCOUNT =================
+const mt5db = new sqlite3.Database('./nexafunds_mt5.db')
+
+app.get('/api/mt5/account', (req, res) => {
+  mt5db.get(
+    'SELECT * FROM mt5_account LIMIT 1',
     (err, row) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          error: err.message,
+        })
+      }
+
+      if (!row) {
+        return res.status(404).json({
+          success: false,
+          error: 'No MT5 account data found',
+        })
+      }
+
+      res.json({
+        success: true,
+        account: row,
+      })
+    }
+  )
+})
+
+app.get('/api/mt5/positions', (req, res) => {
+  mt5db.all(
+    'SELECT * FROM mt5_positions ORDER BY updated_at DESC',
+    (err, rows) => {
       if (err) {
         return res.status(500).json({
           success: false,
@@ -521,7 +555,7 @@ app.get('/api/stats/users', (req, res) => {
 
       res.json({
         success: true,
-        totalUsers: row.total,
+        positions: rows,
       })
     }
   )
