@@ -40,9 +40,9 @@ export default function Dashboard() {
     totalReturn: 0,
   })
   const [eaSettings, setEaSettings] = useState(defaultSettings)
-  const [totalUsers, setTotalUsers] = useState(0)
- const [user, setUser] = useState({ first_name: 'Investor' })
-
+const [totalUsers, setTotalUsers] = useState(0)
+const [user, setUser] = useState({ first_name: 'Investor' })
+const [positions, setPositions] = useState([])
 useEffect(() => {
   document.documentElement.style.colorScheme = theme
   localStorage.setItem('nexafunds-theme', theme)
@@ -139,6 +139,11 @@ useEffect(() => {
     clearInterval(interval)
   }
 }, [])
+const money = (value) =>
+  `$${Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
   const stats = [
     { label: 'Current balance', value: money(account.currentBalance), change: '+8.4%', tone: 'emerald' },
     { label: 'Net profit', value: money(account.totalProfit), change: '+12.6%', tone: 'blue' },
