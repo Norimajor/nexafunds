@@ -41,110 +41,104 @@ export default function Dashboard() {
   })
   const [eaSettings, setEaSettings] = useState(defaultSettings)
   const [totalUsers, setTotalUsers] = useState(0)
-  const [user, setUser] = useState(null)
-  const [positions, setPositions] = useState([])
-  useEffect(() => {
-    document.documentElement.style.colorScheme = theme
-    localStorage.setItem('nexafunds-theme', theme)
-  }, [theme])
+ const [user, setUser] = useState({ first_name: 'Investor' })
 
-  useEffect(() => {
-    let cancelled = false
-    const fetchUser = async () => {
-  try {
-    const response = await fetch(`${API_BASE}/api/auth/me`, {
-      credentials: 'include',
-    })
+useEffect(() => {
+  document.documentElement.style.colorScheme = theme
+  localStorage.setItem('nexafunds-theme', theme)
+}, [theme])
 
-    const data = await response.json()
+useEffect(() => {
+  let cancelled = false
 
-    if (!cancelled && data.success) {
-      setUser(data.user)
+  const fetchUser = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/me`, {
+        credentials: 'include',
+      })
+
+      const data = await response.json()
+
+      if (!cancelled && data.success && data.user) {
+        setUser(data.user)
+      }
+    } catch (error) {
+      console.error('Failed to fetch user:', error)
     }
-  } catch (error) {
-    console.error('Failed to fetch user:', error)
   }
-}
 
-    const fetchAccount = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/mt5/account`)
-        const data = await response.json()
-        if (cancelled || !data.success) return
+  const fetchAccount = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/mt5/account`)
+      const data = await response.json()
+      if (cancelled || !data.success) return
 
-        const mt5 = data.account
-        const balance = Number(mt5.balance) || 0
-        const equity = Number(mt5.equity) || 0
+      const mt5 = data.account
+      const balance = Number(mt5.balance) || 0
+      const equity = Number(mt5.equity) || 0
 
-        setAccount({
-          currentBalance: balance,
-          totalProfit: Number(mt5.profit) || 0,
-          portfolioValue: equity,
-          totalInvested: balance,
-          monthlyGain: 12.5,
-          totalReturn: balance > 0 ? ((equity - balance) / balance) * 100 : 0,
-        })
-      } catch (error) {
-        console.error('Failed to fetch MT5 account:', error)
-      }
+      setAccount({
+        currentBalance: balance,
+        totalProfit: Number(mt5.profit) || 0,
+        portfolioValue: equity,
+        totalInvested: balance,
+        monthlyGain: 12.5,
+        totalReturn: balance > 0 ? ((equity - balance) / balance) * 100 : 0,
+      })
+    } catch (error) {
+      console.error('Failed to fetch MT5 account:', error)
     }
+  }
 
-    const fetchPositions = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/mt5/positions`)
-        const data = await response.json()
-        if (cancelled || !data.success) return
-        setPositions(data.positions || [])
-      } catch (error) {
-        console.error('Failed to fetch MT5 positions:', error)
-      }
+  const fetchPositions = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/mt5/positions`)
+      const data = await response.json()
+      if (cancelled || !data.success) return
+      setPositions(data.positions || [])
+    } catch (error) {
+      console.error('Failed to fetch MT5 positions:', error)
     }
+  }
 
-    const fetchEaSettings = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/ea/settings`)
-        const data = await response.json()
-        if (cancelled || !data.success) return
-        setEaSettings({ ...defaultSettings, ...data.settings })
-      } catch (error) {
-        console.error('Failed to fetch EA settings:', error)
-      }
+  const fetchEaSettings = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/ea/settings`)
+      const data = await response.json()
+      if (cancelled || !data.success) return
+      setEaSettings({ ...defaultSettings, ...data.settings })
+    } catch (error) {
+      console.error('Failed to fetch EA settings:', error)
     }
+  }
 
-    const fetchTotalUsers = async () => {
-      try {
-const response = await fetch(`${API_BASE}/api/stats/users`)
-        const data = await response.json()
-        if (cancelled) return
-        setTotalUsers(data.totalUsers || 0)
-      } catch (error) {
-        console.error('Failed to fetch total users:', error)
-      }
+  const fetchTotalUsers = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/stats/users`)
+      const data = await response.json()
+      if (cancelled) return
+      setTotalUsers(data.totalUsers || 0)
+    } catch (error) {
+      console.error('Failed to fetch total users:', error)
     }
+  }
 
-fetchUser()
+  fetchUser()
+  fetchAccount()
+  fetchPositions()
+  fetchEaSettings()
+  fetchTotalUsers()
+
+  const interval = setInterval(() => {
     fetchAccount()
     fetchPositions()
-    fetchEaSettings()
-    fetchTotalUsers()
+  }, 5000)
 
-    const interval = setInterval(() => {
-      fetchAccount()
-      fetchPositions()
-    }, 5000)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
-
-  const money = (value) =>
-    `$${Number(value).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`
-
+  return () => {
+    cancelled = true
+    clearInterval(interval)
+  }
+}, [])
   const stats = [
     { label: 'Current balance', value: money(account.currentBalance), change: '+8.4%', tone: 'emerald' },
     { label: 'Net profit', value: money(account.totalProfit), change: '+12.6%', tone: 'blue' },
@@ -371,15 +365,13 @@ fetchUser()
       : 'rounded-[28px] border border-slate-200 bg-gradient-to-r from-white via-sky-50 to-emerald-50 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.08)]'
   }
 >
-  <h2 className="text-2xl font-bold">
-  {user?.first_name || 'Investor'}, welcome to NexaFunds 👋
+ <h2 className="text-2xl font-bold">
+  {user.first_name}, welcome to NexaFunds 👋
 </h2>
 
 <p className={isDark ? 'mt-3 text-sm text-slate-300' : 'mt-3 text-sm text-slate-600'}>
-  {user?.first_name || 'Investor'}, welcome to
-  <span className="font-semibold text-sky-500">NexaFunds</span>,
-  where you get to interact with
-  <span className="font-semibold text-emerald-500">
+  {user.first_name}, welcome to <span className="font-semibold text-sky-500">NexaFunds</span>,
+  where you get to interact with <span className="font-semibold text-emerald-500">
     {totalUsers} active {totalUsers === 1 ? 'trader' : 'traders'}
   </span>
   and follow live portfolio performance as our trading community grows.
