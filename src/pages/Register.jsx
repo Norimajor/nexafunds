@@ -59,10 +59,10 @@ export default function Register() {
       alert('Please enter your first and last name.')
       return
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      alert('Please enter a valid email address.')
-      return
-    }
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+  alert('Please enter a valid email address.')
+  return
+}
     if (!country) {
       alert('Please select your country.')
       return
