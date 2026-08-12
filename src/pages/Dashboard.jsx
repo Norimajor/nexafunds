@@ -41,6 +41,7 @@ export default function Dashboard() {
   })
   const [eaSettings, setEaSettings] = useState(defaultSettings)
   const [totalUsers, setTotalUsers] = useState(0)
+  const [user, setUser] = useState(null)
   const [positions, setPositions] = useState([])
   useEffect(() => {
     document.documentElement.style.colorScheme = theme
@@ -49,6 +50,21 @@ export default function Dashboard() {
 
   useEffect(() => {
     let cancelled = false
+    const fetchUser = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/me`, {
+      credentials: 'include',
+    })
+
+    const data = await response.json()
+
+    if (!cancelled && data.success) {
+      setUser(data.user)
+    }
+  } catch (error) {
+    console.error('Failed to fetch user:', error)
+  }
+}
 
     const fetchAccount = async () => {
       try {
@@ -106,6 +122,7 @@ const response = await fetch(`${API_BASE}/api/stats/users`)
       }
     }
 
+fetchUser()
     fetchAccount()
     fetchPositions()
     fetchEaSettings()
@@ -355,22 +372,18 @@ const response = await fetch(`${API_BASE}/api/stats/users`)
   }
 >
   <h2 className="text-2xl font-bold">
-    Obed, welcome to NexaFunds 👋
-  </h2>
+  {user?.first_name || 'Investor'}, welcome to NexaFunds 👋
+</h2>
 
-  <p
-    className={
-      isDark
-        ? 'mt-3 text-sm text-slate-300'
-        : 'mt-3 text-sm text-slate-600'
-    }
-  >
-    Obed, welcome to <span className="font-semibold text-sky-500">NexaFunds</span>,
-    where you get to interact with <span className="font-semibold text-emerald-500">
-      {totalUsers} active {totalUsers === 1 ? 'trader' : 'traders'}
-    </span>
-    and follow live portfolio performance as our trading community grows.
-  </p>
+<p className={isDark ? 'mt-3 text-sm text-slate-300' : 'mt-3 text-sm text-slate-600'}>
+  {user?.first_name || 'Investor'}, welcome to
+  <span className="font-semibold text-sky-500">NexaFunds</span>,
+  where you get to interact with
+  <span className="font-semibold text-emerald-500">
+    {totalUsers} active {totalUsers === 1 ? 'trader' : 'traders'}
+  </span>
+  and follow live portfolio performance as our trading community grows.
+</p>
 </div>
           <div className="space-y-6 px-4 py-6 sm:px-6">
             <section className="grid gap-5 xl:grid-cols-[1.6fr_0.8fr]">
