@@ -26,11 +26,14 @@ const defaultSettings = {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+
   const [theme, setTheme] = useState(
     () => (typeof window !== 'undefined' && localStorage.getItem('nexafunds-theme')) || 'dark',
   )
+
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+
   const [account, setAccount] = useState({
     currentBalance: 0,
     totalProfit: 0,
@@ -39,106 +42,151 @@ export default function Dashboard() {
     monthlyGain: 0,
     totalReturn: 0,
   })
+
   const [eaSettings, setEaSettings] = useState(defaultSettings)
-const [totalUsers, setTotalUsers] = useState(0)
-const [user, setUser] = useState({ first_name: 'Investor' })
-const [positions, setPositions] = useState([])
-useEffect(() => {
-  document.documentElement.style.colorScheme = theme
-  localStorage.setItem('nexafunds-theme', theme)
-}, [theme])
+  const [totalUsers, setTotalUsers] = useState(0)
+  const [user, setUser] = useState({ first_name: 'Investor' })
+  const [positions, setPositions] = useState([])
+  const [nfpForecast, setNfpForecast] = useState(null)
 
-useEffect(() => {
-  let cancelled = false
+  // ✅ NEW LIVE EA STATS
+  const [eaStats, setEaStats] = useState({
+    activeStrategy: 'Unknown',
+    riskProfile: 'Unknown',
+    maxDrawdown: 0,
+    autoTrading: false,
+    openPositions: 0,
+    todayProfit: 0,
+  })
 
-  const fetchUser = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/auth/me`, {
-        credentials: 'include',
-      })
+  useEffect(() => {
+    document.documentElement.style.colorScheme = theme
+    localStorage.setItem('nexafunds-theme', theme)
+  }, [theme])
 
-      const data = await response.json()
+  useEffect(() => {
+    let cancelled = false
 
-      if (!cancelled && data.success && data.user) {
-        setUser(data.user)
+    const fetchUser = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/me`, {
+          credentials: 'include',
+        })
+
+        const data = await response.json()
+
+        if (!cancelled && data.success && data.user) {
+          setUser(data.user)
+        }
+      } catch (error) {
+        console.error('Failed to fetch user:', error)
       }
-    } catch (error) {
-      console.error('Failed to fetch user:', error)
     }
-  }
 
-  const fetchAccount = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/mt5/account`)
-      const data = await response.json()
-      if (cancelled || !data.success) return
+    const fetchAccount = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/mt5/account`)
+        const data = await response.json()
 
-      const mt5 = data.account
-      const balance = Number(mt5.balance) || 0
-      const equity = Number(mt5.equity) || 0
+        if (cancelled || !data.success) return
 
-      setAccount({
-        currentBalance: balance,
-        totalProfit: Number(mt5.profit) || 0,
-        portfolioValue: equity,
-        totalInvested: balance,
-        monthlyGain: 12.5,
-        totalReturn: balance > 0 ? ((equity - balance) / balance) * 100 : 0,
-      })
-    } catch (error) {
-      console.error('Failed to fetch MT5 account:', error)
+        const mt5 = data.account
+        const balance = Number(mt5.balance) || 0
+        const equity = Number(mt5.equity) || 0
+        const profit = Number(mt5.profit) || 0
+
+        setAccount({
+          currentBalance: balance,
+          totalProfit: profit,
+          portfolioValue: equity,
+          totalInvested: balance,
+          monthlyGain: 12.5,
+          totalReturn: balance > 0 ? ((equity - balance) / balance) * 100 : 0,
+        })
+
+        // ✅ UPDATE LIVE EA STATS
+        setEaStats({
+          activeStrategy: mt5.server || 'MT5 Live Engine',
+          riskProfile: balance > 0 && ((equity - balance) / balance) * 100 > 10
+            ? 'Moderate'
+            : 'Conservative',
+          maxDrawdown: Math.max(0, balance - equity),
+          autoTrading: true,
+          openPositions: positions.length,
+          todayProfit: profit,
+        })
+      } catch (error) {
+        console.error('Failed to fetch MT5 account:', error)
+      }
     }
-  }
 
-  const fetchPositions = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/mt5/positions`)
-      const data = await response.json()
-      if (cancelled || !data.success) return
-      setPositions(data.positions || [])
-    } catch (error) {
-      console.error('Failed to fetch MT5 positions:', error)
+    const fetchPositions = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/mt5/positions`)
+        const data = await response.json()
+
+        if (cancelled || !data.success) return
+
+        setPositions(data.positions || [])
+      } catch (error) {
+        console.error('Failed to fetch MT5 positions:', error)
+      }
     }
-  }
 
-  const fetchEaSettings = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/ea/settings`)
-      const data = await response.json()
-      if (cancelled || !data.success) return
-      setEaSettings({ ...defaultSettings, ...data.settings })
-    } catch (error) {
-      console.error('Failed to fetch EA settings:', error)
+    const fetchEaSettings = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/ea/settings`)
+        const data = await response.json()
+
+        if (cancelled || !data.success) return
+
+        setEaSettings({ ...defaultSettings, ...data.settings })
+      } catch (error) {
+        console.error('Failed to fetch EA settings:', error)
+      }
     }
-  }
 
-  const fetchTotalUsers = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/stats/users`)
-      const data = await response.json()
-      if (cancelled) return
-      setTotalUsers(data.totalUsers || 0)
-    } catch (error) {
-      console.error('Failed to fetch total users:', error)
+    const fetchTotalUsers = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/stats/users`)
+        const data = await response.json()
+
+        if (cancelled) return
+
+        setTotalUsers(data.totalUsers || 0)
+      } catch (error) {
+        console.error('Failed to fetch total users:', error)
+      }
     }
+const fetchNfpForecast = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/api/nfp`)
+    const data = await response.json()
+
+    if (cancelled || !data.success) return
+
+    setNfpForecast(data)
+  } catch (error) {
+    console.error('Failed to fetch NFP forecast:', error)
   }
-
-  fetchUser()
-  fetchAccount()
-  fetchPositions()
-  fetchEaSettings()
-  fetchTotalUsers()
-
-  const interval = setInterval(() => {
+}
+    fetchUser()
     fetchAccount()
     fetchPositions()
-  }, 5000)
+    fetchEaSettings()
+    fetchTotalUsers()
 
-  return () => {
-    cancelled = true
-    clearInterval(interval)
-  }
-}, [])
+    const interval = setInterval(() => {
+  fetchAccount()
+  fetchPositions()
+  fetchNfpForecast()
+}, 5000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 const money = (value) =>
   `$${Number(value).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -483,7 +531,74 @@ const money = (value) =>
                 </div>
               </div>
             </section>
+<section
+  className={
+    isDark
+      ? 'rounded-[30px] border border-slate-800/90 bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950 p-6 shadow-[0_25px_60px_rgba(15,23,42,0.45)]'
+      : 'rounded-[30px] border border-slate-200 bg-gradient-to-r from-white via-sky-50 to-blue-50 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.08)]'
+  }
+>
+  <div className="flex items-center justify-between gap-4">
+    <div>
+      <p className="text-sm uppercase tracking-[0.22em] text-sky-500">
+        USD Economic Forecast
+      </p>
 
+      <h3 className="mt-2 text-2xl font-bold">
+        Non-Farm Payrolls (NFP)
+      </h3>
+
+      <p className={isDark ? 'mt-2 text-sm text-slate-400' : 'mt-2 text-sm text-slate-500'}>
+        AI forecast based on the latest available economic data.
+      </p>
+    </div>
+
+    <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-500">
+      AI Forecast
+    </span>
+  </div>
+
+  {nfpForecast ? (
+    <div className="mt-6 grid gap-4 sm:grid-cols-3">
+      <div className={isDark ? 'rounded-2xl bg-slate-800/70 p-4' : 'rounded-2xl bg-white/70 p-4'}>
+        <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
+          Forecast
+        </p>
+        <h4 className="mt-2 text-3xl font-bold text-sky-500">
+          {Number(nfpForecast.prediction).toFixed(1)}K
+        </h4>
+      </div>
+
+      <div className={isDark ? 'rounded-2xl bg-slate-800/70 p-4' : 'rounded-2xl bg-white/70 p-4'}>
+        <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
+          Reference Month
+        </p>
+        <h4 className="mt-2 text-lg font-semibold">
+          {nfpForecast.reference_month}
+        </h4>
+      </div>
+
+      <div className={isDark ? 'rounded-2xl bg-slate-800/70 p-4' : 'rounded-2xl bg-white/70 p-4'}>
+        <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
+          Training Rows
+        </p>
+        <h4 className="mt-2 text-lg font-semibold">
+          {nfpForecast.training_rows}
+        </h4>
+      </div>
+    </div>
+  ) : (
+    <div className={isDark ? 'mt-6 text-sm text-slate-400' : 'mt-6 text-sm text-slate-500'}>
+      Loading NFP forecast...
+    </div>
+  )}
+
+  {nfpForecast && (
+    <p className={isDark ? 'mt-4 text-xs text-slate-500' : 'mt-4 text-xs text-slate-400'}>
+      Model: {nfpForecast.model}
+    </p>
+  )}
+</section>
             <section className="grid gap-4 md:grid-cols-2">
               {accessCards.map((card) => (
                 <div

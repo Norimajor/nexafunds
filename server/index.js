@@ -4,6 +4,7 @@ import sqlite3 from 'sqlite3'
 import bcrypt from 'bcrypt'
 import dotenv from 'dotenv'
 import session from 'express-session'
+import fs from 'fs' 
 
 dotenv.config()
 
@@ -200,7 +201,6 @@ const initDatabases = async () => {
     )
   }
 }
-
 // ============================================================
 // ROUTES
 // ============================================================
@@ -209,6 +209,79 @@ app.get('/', (req, res) => {
   res.send('NexaFunds backend is running')
 })
 
+// ============================================================
+// NFP FORECAST
+// ============================================================
+
+const NFP_FILE =
+  'C:\\Users\\USER\\USDNewsAI\\data\\processed\\latest_nfp_prediction.csv'
+
+app.get('/api/nfp', (req, res) => {
+  try {
+    if (!fs.existsSync(NFP_FILE)) {
+      return res.status(404).json({
+        success: false,
+        error: 'NFP prediction file not found',
+      })
+    }
+
+    const csv = fs.readFileSync(NFP_FILE, 'utf8').trim()
+
+    const lines = csv
+      .split(/\r?\n/)
+      .filter(Boolean)
+
+    if (lines.length < 2) {
+      return res.status(404).json({
+        success: false,
+        error: 'NFP prediction file is empty',
+      })
+    }
+
+    const headers = lines[0].split(',')
+    const values = lines[1].split(',')
+
+    const data = {}
+
+    headers.forEach((header, index) => {
+      data[header.trim()] = values[index]?.trim()
+    })
+
+    res.json({
+      success: true,
+
+      prediction: Number(data.nfp_prediction),
+
+      ridge: Number(data.ridge_prediction),
+
+      random_forest: Number(data.rf_prediction),
+
+      gradient_boosting: Number(data.gb_prediction),
+
+      reference_month: data.reference_month,
+
+      information_cutoff: data.information_cutoff,
+
+      latest_release_date: data.latest_release_date,
+
+      prediction_time: data.prediction_time,
+
+      model: data.model,
+
+      features: Number(data.feature_count),
+
+      training_rows: Number(data.training_rows),
+    })
+
+  } catch (error) {
+    console.error('NFP API error:', error)
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to read NFP prediction',
+    })
+  }
+})
 // ---------------- REGISTER ----------------
 
 app.post(
