@@ -209,23 +209,63 @@ app.get('/', (req, res) => {
   res.send('NexaFunds backend is running')
 })
 
+
 // ============================================================
 // NFP FORECAST
 // ============================================================
 
+// Production NFP forecast data.
+// This endpoint is consumed by the NexaFunds Dashboard.
+//
+// IMPORTANT:
+// The frontend uses:
+//     GET /api/nfp/latest
+//
+// Keep this endpoint compatible with the USDNewsAI API response.
+
 const NFP_DATA = {
-  prediction: 76.60974978558517,
-  ridge: 111.05365889907682,
-  random_forest: 104.70161011265385,
-  gradient_boosting: 2.592677307194251,
-  reference_month: '2026-07-01',
-  information_cutoff: '2026-08-06',
-  latest_release_date: '2026-08-07',
-  prediction_time: '2026-08-16 13:46:36.837064',
-  model: 'NFP V2 crude multi-indicator ensemble',
+  prediction: 161.6820943737181,
+  ridge: 154.48211922899213,
+  random_forest: 139.6240549607354,
+  gradient_boosting: 193.34010064633543,
+
+  forecast_release_date: '2026-09-04',
+  reference_month: '2026-08-01',
+  information_cutoff: '2026-08-15',
+
+  consensus: null,
+  consensus_nfp: null,
+  consensus_source: 'manual',
+  consensus_updated_at: '2026-08-16',
+
+  expected_surprise: null,
+  surprise_percent: null,
+  direction: null,
+  magnitude: null,
+
+  prediction_time: '2026-08-16',
+  model: 'NFP V2 multi-indicator ensemble',
   features: 63,
   training_rows: 137,
 }
+
+// ------------------------------------------------------------
+// Latest NFP endpoint
+// ------------------------------------------------------------
+
+app.get('/api/nfp/latest', (req, res) => {
+  res.json({
+    success: true,
+    ...NFP_DATA,
+  })
+})
+
+// ------------------------------------------------------------
+// Backward-compatible endpoint
+// ------------------------------------------------------------
+//
+// Keep /api/nfp working so any older NexaFunds code or other
+// clients using the previous endpoint do not break.
 
 app.get('/api/nfp', (req, res) => {
   res.json({
@@ -233,6 +273,7 @@ app.get('/api/nfp', (req, res) => {
     ...NFP_DATA,
   })
 })
+
 // ---------------- REGISTER ----------------
 
 app.post(
