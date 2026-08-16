@@ -213,74 +213,25 @@ app.get('/', (req, res) => {
 // NFP FORECAST
 // ============================================================
 
-const NFP_FILE =
-  'C:\\Users\\USER\\USDNewsAI\\data\\processed\\latest_nfp_prediction.csv'
+const NFP_DATA = {
+  prediction: 76.60974978558517,
+  ridge: 111.05365889907682,
+  random_forest: 104.70161011265385,
+  gradient_boosting: 2.592677307194251,
+  reference_month: '2026-07-01',
+  information_cutoff: '2026-08-06',
+  latest_release_date: '2026-08-07',
+  prediction_time: '2026-08-16 13:46:36.837064',
+  model: 'NFP V2 crude multi-indicator ensemble',
+  features: 63,
+  training_rows: 137,
+}
 
 app.get('/api/nfp', (req, res) => {
-  try {
-    if (!fs.existsSync(NFP_FILE)) {
-      return res.status(404).json({
-        success: false,
-        error: 'NFP prediction file not found',
-      })
-    }
-
-    const csv = fs.readFileSync(NFP_FILE, 'utf8').trim()
-
-    const lines = csv
-      .split(/\r?\n/)
-      .filter(Boolean)
-
-    if (lines.length < 2) {
-      return res.status(404).json({
-        success: false,
-        error: 'NFP prediction file is empty',
-      })
-    }
-
-    const headers = lines[0].split(',')
-    const values = lines[1].split(',')
-
-    const data = {}
-
-    headers.forEach((header, index) => {
-      data[header.trim()] = values[index]?.trim()
-    })
-
-    res.json({
-      success: true,
-
-      prediction: Number(data.nfp_prediction),
-
-      ridge: Number(data.ridge_prediction),
-
-      random_forest: Number(data.rf_prediction),
-
-      gradient_boosting: Number(data.gb_prediction),
-
-      reference_month: data.reference_month,
-
-      information_cutoff: data.information_cutoff,
-
-      latest_release_date: data.latest_release_date,
-
-      prediction_time: data.prediction_time,
-
-      model: data.model,
-
-      features: Number(data.feature_count),
-
-      training_rows: Number(data.training_rows),
-    })
-
-  } catch (error) {
-    console.error('NFP API error:', error)
-
-    res.status(500).json({
-      success: false,
-      error: 'Failed to read NFP prediction',
-    })
-  }
+  res.json({
+    success: true,
+    ...NFP_DATA,
+  })
 })
 // ---------------- REGISTER ----------------
 
