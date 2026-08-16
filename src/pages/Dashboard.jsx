@@ -160,14 +160,18 @@ export default function Dashboard() {
     }
 const fetchNfpForecast = async () => {
   try {
-    const response = await fetch(`${API_BASE}/api/nfp`)
-    const data = await response.json()
+    const response = await fetch(`${API_BASE}/api/nfp/latest`)
 
-    if (cancelled || !data.success) return
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
 
     setNfpForecast(data)
   } catch (error) {
     console.error('Failed to fetch NFP forecast:', error)
+    setNfpForecast(null)
   }
 }
     fetchUser()
@@ -531,74 +535,158 @@ const money = (value) =>
                 </div>
               </div>
             </section>
-<section
-  className={
-    isDark
-      ? 'rounded-[30px] border border-slate-800/90 bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950 p-6 shadow-[0_25px_60px_rgba(15,23,42,0.45)]'
-      : 'rounded-[30px] border border-slate-200 bg-gradient-to-r from-white via-sky-50 to-blue-50 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.08)]'
-  }
->
-  <div className="flex items-center justify-between gap-4">
-    <div>
-      <p className="text-sm uppercase tracking-[0.22em] text-sky-500">
-        USD Economic Forecast
-      </p>
+<div className="mt-8">
+  <div className="mb-4">
+    <h2 className="text-xl font-semibold text-white">
+      USD Economic Forecast
+    </h2>
 
-      <h3 className="mt-2 text-2xl font-bold">
-        Non-Farm Payrolls (NFP)
-      </h3>
-
-      <p className={isDark ? 'mt-2 text-sm text-slate-400' : 'mt-2 text-sm text-slate-500'}>
-        AI forecast based on the latest available economic data.
-      </p>
-    </div>
-
-    <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-500">
-      AI Forecast
-    </span>
+    <p className="text-sm text-gray-400 mt-1">
+      AI-powered forecast based on the latest available economic data.
+    </p>
   </div>
 
-  {nfpForecast ? (
-    <div className="mt-6 grid gap-4 sm:grid-cols-3">
-      <div className={isDark ? 'rounded-2xl bg-slate-800/70 p-4' : 'rounded-2xl bg-white/70 p-4'}>
-        <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
-          Forecast
+  <div className="bg-[#111827] border border-gray-800 rounded-2xl p-6">
+
+    <div className="flex items-center justify-between mb-6">
+      <div>
+        <h3 className="text-lg font-semibold text-white">
+          Non-Farm Payrolls (NFP)
+        </h3>
+
+        <p className="text-sm text-gray-400 mt-1">
+          Next U.S. employment release
         </p>
-        <h4 className="mt-2 text-3xl font-bold text-sky-500">
-          {Number(nfpForecast.prediction).toFixed(1)}K
-        </h4>
       </div>
 
-      <div className={isDark ? 'rounded-2xl bg-slate-800/70 p-4' : 'rounded-2xl bg-white/70 p-4'}>
-        <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
-          Reference Month
-        </p>
-        <h4 className="mt-2 text-lg font-semibold">
-          {nfpForecast.reference_month}
-        </h4>
-      </div>
+      {nfpForecast?.forecast_release_date && (
+        <div className="text-right">
+          <p className="text-xs text-gray-500">
+            Release
+          </p>
 
-      <div className={isDark ? 'rounded-2xl bg-slate-800/70 p-4' : 'rounded-2xl bg-white/70 p-4'}>
-        <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
-          Training Rows
-        </p>
-        <h4 className="mt-2 text-lg font-semibold">
-          {nfpForecast.training_rows}
-        </h4>
-      </div>
+          <p className="text-sm text-white">
+            {nfpForecast.forecast_release_date}
+          </p>
+        </div>
+      )}
     </div>
-  ) : (
-    <div className={isDark ? 'mt-6 text-sm text-slate-400' : 'mt-6 text-sm text-slate-500'}>
-      Loading NFP forecast...
-    </div>
-  )}
 
-  {nfpForecast && (
-    <p className={isDark ? 'mt-4 text-xs text-slate-500' : 'mt-4 text-xs text-slate-400'}>
-      Model: {nfpForecast.model}
-    </p>
-  )}
-</section>
+    {nfpForecast ? (
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+        {/* AI FORECAST */}
+        <div className="bg-gray-900/60 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide">
+            AI Forecast
+          </p>
+
+          <p className="text-3xl font-bold text-white mt-2">
+            {Number(nfpForecast.prediction).toFixed(1)}K
+          </p>
+
+          <p className="text-xs text-gray-500 mt-2">
+            Ensemble prediction
+          </p>
+        </div>
+
+        {/* CONSENSUS */}
+        <div className="bg-gray-900/60 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide">
+            Market Consensus
+          </p>
+
+          <p className="text-3xl font-bold text-white mt-2">
+            {nfpForecast.consensus_nfp != null
+              ? `${Number(nfpForecast.consensus_nfp).toFixed(1)}K`
+              : 'N/A'}
+          </p>
+
+          <p className="text-xs text-gray-500 mt-2">
+            {nfpForecast.consensus_source || 'No consensus available'}
+          </p>
+        </div>
+
+        {/* EXPECTED SURPRISE */}
+        <div className="bg-gray-900/60 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide">
+            Expected Surprise
+          </p>
+
+          <p className="text-3xl font-bold text-white mt-2">
+            {nfpForecast.expected_surprise != null
+              ? `${Number(nfpForecast.expected_surprise).toFixed(1)}K`
+              : 'N/A'}
+          </p>
+
+          <p className="text-xs text-gray-500 mt-2">
+            AI forecast − consensus
+          </p>
+        </div>
+
+        {/* USD DIRECTION */}
+        <div className="bg-gray-900/60 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide">
+            USD Direction
+          </p>
+
+          <p className="text-2xl font-bold text-white mt-3">
+            {nfpForecast.direction || 'N/A'}
+          </p>
+
+          <p className="text-xs text-gray-500 mt-2">
+            Magnitude:{' '}
+            {nfpForecast.magnitude || 'N/A'}
+          </p>
+        </div>
+
+      </div>
+
+    ) : (
+
+      <div className="text-sm text-gray-400 py-6">
+        Loading NFP forecast...
+      </div>
+
+    )}
+
+    {nfpForecast && (
+      <div className="mt-6 pt-4 border-t border-gray-800 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-500">
+
+        <span>
+          Reference month:{' '}
+          {nfpForecast.reference_month
+            ? new Date(nfpForecast.reference_month).toLocaleDateString(
+                'en-US',
+                {
+                  month: 'long',
+                  year: 'numeric'
+                }
+              )
+            : 'N/A'}
+        </span>
+
+        <span>
+          Information cutoff:{' '}
+          {nfpForecast.information_cutoff || 'N/A'}
+        </span>
+
+        <span>
+          Training rows:{' '}
+          {nfpForecast.training_rows ?? 'N/A'}
+        </span>
+
+        <span>
+          Features:{' '}
+          {nfpForecast.features ?? 'N/A'}
+        </span>
+
+      </div>
+    )}
+
+  </div>
+</div>
             <section className="grid gap-4 md:grid-cols-2">
               {accessCards.map((card) => (
                 <div
