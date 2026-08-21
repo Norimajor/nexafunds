@@ -7,6 +7,7 @@ import VerifyEmail from './pages/VerifyEmail'
 import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
 import Transactions from './pages/Transactions'
+import StrategyAI from './pages/StrategyAI'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route path="/strategy-ai" element={<StrategyAI />} />
       </Routes>
     </BrowserRouter>
   )

@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt'
 import dotenv from 'dotenv'
 import session from 'express-session'
 import fs from 'fs' 
+import strategyRouter from './routes/strategy.js'
 
 dotenv.config()
 
@@ -757,7 +758,7 @@ app.post(
 // ============================================================
 // FALLBACKS
 // ============================================================
-
+app.use('/api/strategy', strategyRouter)
 app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Not found' })
 })

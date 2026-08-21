@@ -5,6 +5,7 @@ const navItems = [
   { label: 'Overview', active: true },
   { label: 'Portfolio' },
   { label: 'Transactions' },
+  { label: 'Strategy AI' },
 ]
 
 const chartPath =
@@ -273,12 +274,12 @@ export default function Dashboard() {
           ? 'text-slate-300 hover:bg-white/[0.06] hover:text-white active:bg-sky-500/20 active:text-sky-200'
           : 'text-slate-600 hover:bg-slate-900/[0.04] hover:text-slate-900 active:bg-sky-500/15 active:text-sky-700',
     ].join(' ')
-
-  const goTo = (labelName) => {
-    setActiveNav(labelName)
-    if (labelName === 'Portfolio') navigate('/portfolio')
-    if (labelName === 'Transactions') navigate('/transactions')
-  }
+const goTo = (labelName) => {
+  setActiveNav(labelName)
+  if (labelName === 'Portfolio') navigate('/portfolio')
+  if (labelName === 'Transactions') navigate('/transactions')
+  if (labelName === 'Strategy AI') navigate('/strategy-ai')
+}
 
   /* ---------- shared EA settings form (used by modal + panel) ---------- */
   const settingsForm = (
