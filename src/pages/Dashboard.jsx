@@ -33,6 +33,9 @@ export default function Dashboard() {
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false)
+  const [activeNav, setActiveNav] = useState('Overview')
+  const [activeRange, setActiveRange] = useState('3M')
 
   const [account, setAccount] = useState({
     currentBalance: 0,
@@ -69,15 +72,9 @@ export default function Dashboard() {
 
     const fetchUser = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/auth/me`, {
-          credentials: 'include',
-        })
-
+        const response = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' })
         const data = await response.json()
-
-        if (!cancelled && data.success && data.user) {
-          setUser(data.user)
-        }
+        if (!cancelled && data.success && data.user) setUser(data.user)
       } catch (error) {
         console.error('Failed to fetch user:', error)
       }
@@ -87,7 +84,6 @@ export default function Dashboard() {
       try {
         const response = await fetch(`${API_BASE}/api/mt5/account`)
         const data = await response.json()
-
         if (cancelled || !data.success) return
 
         const mt5 = data.account
@@ -107,9 +103,8 @@ export default function Dashboard() {
         // ✅ UPDATE LIVE EA STATS
         setEaStats({
           activeStrategy: mt5.server || 'MT5 Live Engine',
-          riskProfile: balance > 0 && ((equity - balance) / balance) * 100 > 10
-            ? 'Moderate'
-            : 'Conservative',
+          riskProfile:
+            balance > 0 && ((equity - balance) / balance) * 100 > 10 ? 'Moderate' : 'Conservative',
           maxDrawdown: Math.max(0, balance - equity),
           autoTrading: true,
           openPositions: positions.length,
@@ -124,9 +119,7 @@ export default function Dashboard() {
       try {
         const response = await fetch(`${API_BASE}/api/mt5/positions`)
         const data = await response.json()
-
         if (cancelled || !data.success) return
-
         setPositions(data.positions || [])
       } catch (error) {
         console.error('Failed to fetch MT5 positions:', error)
@@ -137,9 +130,7 @@ export default function Dashboard() {
       try {
         const response = await fetch(`${API_BASE}/api/ea/settings`)
         const data = await response.json()
-
         if (cancelled || !data.success) return
-
         setEaSettings({ ...defaultSettings, ...data.settings })
       } catch (error) {
         console.error('Failed to fetch EA settings:', error)
@@ -150,30 +141,25 @@ export default function Dashboard() {
       try {
         const response = await fetch(`${API_BASE}/api/stats/users`)
         const data = await response.json()
-
         if (cancelled) return
-
         setTotalUsers(data.totalUsers || 0)
       } catch (error) {
         console.error('Failed to fetch total users:', error)
       }
     }
-const fetchNfpForecast = async () => {
-  try {
-    const response = await fetch(`${API_BASE}/api/nfp/latest`)
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
+    const fetchNfpForecast = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/nfp/latest`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = await response.json()
+        setNfpForecast(data)
+      } catch (error) {
+        console.error('Failed to fetch NFP forecast:', error)
+        setNfpForecast(null)
+      }
     }
 
-    const data = await response.json()
-
-    setNfpForecast(data)
-  } catch (error) {
-    console.error('Failed to fetch NFP forecast:', error)
-    setNfpForecast(null)
-  }
-}
     fetchUser()
     fetchAccount()
     fetchPositions()
@@ -181,21 +167,23 @@ const fetchNfpForecast = async () => {
     fetchTotalUsers()
 
     const interval = setInterval(() => {
-  fetchAccount()
-  fetchPositions()
-  fetchNfpForecast()
-}, 5000)
+      fetchAccount()
+      fetchPositions()
+      fetchNfpForecast()
+    }, 5000)
 
     return () => {
       cancelled = true
       clearInterval(interval)
     }
   }, [])
-const money = (value) =>
-  `$${Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
+
+  const money = (value) =>
+    `$${Number(value).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`
+
   const stats = [
     { label: 'Current balance', value: money(account.currentBalance), change: '+8.4%', tone: 'emerald' },
     { label: 'Net profit', value: money(account.totalProfit), change: '+12.6%', tone: 'blue' },
@@ -242,6 +230,7 @@ const money = (value) =>
       }
 
       setShowSettingsModal(false)
+      setShowSettingsPanel(false)
     } catch (error) {
       console.error(error)
       alert(error instanceof Error ? error.message : 'Unable to update EA settings')
@@ -250,81 +239,249 @@ const money = (value) =>
 
   const isDark = theme === 'dark'
 
+  /* ---------- shared style helpers (professional, consistent) ---------- */
+  const surface = isDark
+    ? 'rounded-3xl border border-white/10 bg-white/[0.04] shadow-[0_24px_60px_-25px_rgba(2,6,23,0.9)] backdrop-blur-xl ring-1 ring-inset ring-white/5'
+    : 'rounded-3xl border border-slate-900/5 bg-white/80 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.35)] backdrop-blur-xl ring-1 ring-inset ring-white'
+
+  const softText = isDark ? 'text-slate-400' : 'text-slate-500'
+  const label = `text-[11px] font-semibold uppercase tracking-[0.2em] ${softText}`
+
+  const pressable =
+    'transition-all duration-200 ease-out active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 focus-visible:ring-offset-2 ' +
+    (isDark ? 'focus-visible:ring-offset-slate-950' : 'focus-visible:ring-offset-slate-100')
+
+  const tonePill = {
+    emerald: 'bg-emerald-500/12 text-emerald-500 ring-1 ring-inset ring-emerald-500/25',
+    blue: 'bg-blue-500/12 text-blue-500 ring-1 ring-inset ring-blue-500/25',
+    violet: 'bg-violet-500/12 text-violet-500 ring-1 ring-inset ring-violet-500/25',
+    amber: 'bg-amber-500/12 text-amber-500 ring-1 ring-inset ring-amber-500/25',
+    sky: 'bg-sky-500/12 text-sky-500 ring-1 ring-inset ring-sky-500/25',
+  }
+
+  const inputClass = isDark
+    ? 'w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2.5 text-slate-100 outline-none transition focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/25'
+    : 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-300/40'
+
+  const navButton = (item, isActive) =>
+    [
+      'group relative flex w-full items-center justify-between overflow-hidden rounded-2xl px-4 py-3 text-left text-sm font-medium',
+      pressable,
+      isActive
+        ? 'bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white shadow-[0_14px_30px_-12px_rgba(14,165,233,0.9)]'
+        : isDark
+          ? 'text-slate-300 hover:bg-white/[0.06] hover:text-white active:bg-sky-500/20 active:text-sky-200'
+          : 'text-slate-600 hover:bg-slate-900/[0.04] hover:text-slate-900 active:bg-sky-500/15 active:text-sky-700',
+    ].join(' ')
+
+  const goTo = (labelName) => {
+    setActiveNav(labelName)
+    if (labelName === 'Portfolio') navigate('/portfolio')
+    if (labelName === 'Transactions') navigate('/transactions')
+  }
+
+  /* ---------- shared EA settings form (used by modal + panel) ---------- */
+  const settingsForm = (
+    <div className="space-y-4">
+      <div>
+        <label className={`mb-2 block text-sm ${softText}`}>Strategy name</label>
+        <input
+          type="text"
+          value={eaSettings.ea_name}
+          onChange={(event) => setEaSettings({ ...eaSettings, ea_name: event.target.value })}
+          className={inputClass}
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className={`mb-2 block text-sm ${softText}`}>Risk profile</label>
+          <select
+            value={eaSettings.ea_risk}
+            onChange={(event) => setEaSettings({ ...eaSettings, ea_risk: event.target.value })}
+            className={inputClass}
+          >
+            <option value="Low">Low</option>
+            <option value="Moderate">Moderate</option>
+            <option value="High">High</option>
+          </select>
+        </div>
+
+        <div>
+          <label className={`mb-2 block text-sm ${softText}`}>Max drawdown %</label>
+          <input
+            type="number"
+            min="1"
+            max="50"
+            value={eaSettings.ea_drawdown}
+            onChange={(event) => setEaSettings({ ...eaSettings, ea_drawdown: event.target.value })}
+            className={inputClass}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className={`mb-2 block text-sm ${softText}`}>EA status</label>
+          <select
+            value={eaSettings.ea_status}
+            onChange={(event) => setEaSettings({ ...eaSettings, ea_status: event.target.value })}
+            className={inputClass}
+          >
+            <option value="Live">Live</option>
+            <option value="Standby">Standby</option>
+            <option value="Paused">Paused</option>
+          </select>
+        </div>
+
+        <div>
+          <label className={`mb-2 block text-sm ${softText}`}>Max order size</label>
+          <input
+            type="number"
+            min="0.1"
+            step="0.1"
+            value={eaSettings.max_order_size}
+            onChange={(event) => setEaSettings({ ...eaSettings, max_order_size: event.target.value })}
+            className={inputClass}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {[
+          { key: 'auto_trade', label: 'Auto-trading' },
+          { key: 'push_notifications', label: 'Push notifications' },
+          { key: 'pamm_access', label: 'PAMM access' },
+          { key: 'broker_access', label: 'Broker access' },
+        ].map((toggle) => {
+          const on = Boolean(eaSettings[toggle.key])
+          return (
+            <label
+              key={toggle.key}
+              className={[
+                'flex cursor-pointer items-center justify-between rounded-xl border p-3 text-sm transition-all duration-200 active:scale-[0.99]',
+                on
+                  ? 'border-sky-500/40 bg-sky-500/10 text-sky-500'
+                  : isDark
+                    ? 'border-white/10 bg-slate-900/60 text-slate-300 hover:border-white/20'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300',
+              ].join(' ')}
+            >
+              <span className="font-medium">{toggle.label}</span>
+              <span className="flex items-center gap-3">
+                <span
+                  className={[
+                    'relative h-6 w-11 rounded-full transition-colors duration-200',
+                    on ? 'bg-gradient-to-r from-blue-600 to-cyan-400' : isDark ? 'bg-slate-700' : 'bg-slate-300',
+                  ].join(' ')}
+                >
+                  <span
+                    className={[
+                      'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all duration-200',
+                      on ? 'left-[22px]' : 'left-0.5',
+                    ].join(' ')}
+                  />
+                </span>
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={(event) => setEaSettings({ ...eaSettings, [toggle.key]: event.target.checked })}
+                  className="sr-only"
+                />
+              </span>
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+
   return (
     <div
       className={
         isDark
-          ? 'relative min-h-screen overflow-hidden bg-slate-950 text-slate-100'
-          : 'relative min-h-screen overflow-hidden bg-slate-100 text-slate-900'
+          ? 'relative min-h-screen overflow-hidden bg-[#070b16] text-slate-100'
+          : 'relative min-h-screen overflow-hidden bg-[#eef2f8] text-slate-900'
       }
     >
+      {/* layered ambient background */}
       <div
         className={
           isDark
-            ? 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),transparent_30%)]'
-            : 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),transparent_30%)]'
+            ? 'pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.20),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(99,102,241,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.14),transparent_60%)]'
+            : 'pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.22),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(129,140,248,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.16),transparent_60%)]'
         }
+      />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(to_right,rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]"
       />
 
       <div className="relative mx-auto flex max-w-[1600px]">
+        {/* ---------------- Sidebar ---------------- */}
         <aside
           className={
             isDark
-              ? 'hidden min-h-screen w-72 border-r border-slate-800/80 bg-slate-900/60 p-6 backdrop-blur-xl lg:flex lg:flex-col'
-              : 'hidden min-h-screen w-72 border-r border-white/60 bg-white/55 p-6 shadow-[inset_-1px_0_0_rgba(148,163,184,0.2)] backdrop-blur-xl lg:flex lg:flex-col'
+              ? 'hidden min-h-screen w-72 shrink-0 border-r border-white/10 bg-white/[0.03] p-6 backdrop-blur-2xl lg:flex lg:flex-col'
+              : 'hidden min-h-screen w-72 shrink-0 border-r border-slate-900/5 bg-white/70 p-6 backdrop-blur-2xl lg:flex lg:flex-col'
           }
         >
           <div className="mb-10 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white shadow-lg shadow-blue-500/30">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white shadow-[0_12px_30px_-10px_rgba(14,165,233,0.9)]">
               N
             </div>
             <div>
-              <h1 className="text-xl font-bold">NexaFunds</h1>
-              <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>Investor Portal</p>
+              <h1 className="text-xl font-bold tracking-tight">NexaFunds</h1>
+              <p className={`text-xs ${softText}`}>Investor Portal</p>
             </div>
           </div>
 
           <nav className="space-y-2">
-            {navItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => {
-                  if (item.label === 'Portfolio') navigate('/portfolio')
-                  if (item.label === 'Transactions') navigate('/transactions')
-                }}
-                className={
-                  item.active
-                    ? 'flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-3 text-left text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition duration-200 hover:-translate-y-0.5'
-                    : isDark
-                      ? 'flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-300 transition duration-200 hover:-translate-y-0.5 hover:bg-slate-800/80'
-                      : 'flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-600 transition duration-200 hover:-translate-y-0.5 hover:bg-slate-100'
-                }
-              >
-                <span>{item.label}</span>
-                {item.active && <span className="h-2.5 w-2.5 rounded-full bg-white/80" />}
-              </button>
-            ))}
+            {navItems.map((item) => {
+              const isActive = activeNav === item.label
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => goTo(item.label)}
+                  className={navButton(item, isActive)}
+                >
+                  <span>{item.label}</span>
+                  {isActive && <span className="h-2.5 w-2.5 rounded-full bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.8)]" />}
+                </button>
+              )
+            })}
+
+            <button
+              type="button"
+              onClick={() => setShowSettingsPanel(true)}
+              className={navButton({ label: 'Settings' }, false)}
+            >
+              <span>Settings</span>
+              <span className={`text-xs ${softText}`}>⚙</span>
+            </button>
           </nav>
 
-          <div
-            className={
-              isDark
-                ? 'mt-auto rounded-3xl border border-slate-700/80 bg-slate-800/70 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.42)]'
-                : 'mt-auto rounded-3xl border border-slate-200 bg-white/70 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)]'
-            }
-          >
-            <p className={isDark ? 'text-xs uppercase tracking-[0.2em] text-slate-400' : 'text-xs uppercase tracking-[0.2em] text-slate-500'}>
-              Account
-            </p>
+          <div className={`mt-auto p-4 ${surface}`}>
+            <p className={label}>Account</p>
             <h3 className="mt-3 text-lg font-semibold">Premium Investor</h3>
-            <p className={isDark ? 'mt-1 text-sm text-slate-400' : 'mt-1 text-sm text-slate-600'}>Tier 3 performance plan</p>
+            <p className={`mt-1 text-sm ${softText}`}>Tier 3 performance plan</p>
           </div>
         </aside>
 
+        {/* ---------------- Mobile sidebar ---------------- */}
         {mobileSidebarOpen && (
-          <div className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden">
-            <div className={isDark ? 'h-full w-72 border-r border-slate-800 bg-slate-900/90 p-6' : 'h-full w-72 border-r border-slate-200 bg-white/90 p-6'}>
+          <div
+            className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
+            onClick={() => setMobileSidebarOpen(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={
+                isDark
+                  ? 'h-full w-72 border-r border-white/10 bg-slate-950/95 p-6'
+                  : 'h-full w-72 border-r border-slate-200 bg-white/95 p-6'
+              }
+            >
               <div className="mb-8 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white">
@@ -332,44 +489,57 @@ const money = (value) =>
                   </div>
                   <h1 className="text-lg font-bold">NexaFunds</h1>
                 </div>
-                <button type="button" onClick={() => setMobileSidebarOpen(false)} className={isDark ? 'text-slate-200' : 'text-slate-700'}>
+                <button
+                  type="button"
+                  onClick={() => setMobileSidebarOpen(false)}
+                  className={`${pressable} rounded-lg px-2 py-1 ${isDark ? 'text-slate-200 hover:bg-white/10' : 'text-slate-700 hover:bg-slate-100'}`}
+                >
                   ✕
                 </button>
               </div>
 
               <nav className="space-y-2">
-                {navItems.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      setMobileSidebarOpen(false)
-                      if (item.label === 'Portfolio') navigate('/portfolio')
-                      if (item.label === 'Transactions') navigate('/transactions')
-                    }}
-                    className={
-                      item.active
-                        ? 'flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-3 text-left text-sm font-medium text-white'
-                        : isDark
-                          ? 'flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-300 hover:bg-slate-800'
-                          : 'flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-600 hover:bg-slate-100'
-                    }
-                  >
-                    <span>{item.label}</span>
-                    {item.active && <span className="h-2.5 w-2.5 rounded-full bg-white/80" />}
-                  </button>
-                ))}
+                {navItems.map((item) => {
+                  const isActive = activeNav === item.label
+                  return (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => {
+                        setMobileSidebarOpen(false)
+                        goTo(item.label)
+                      }}
+                      className={navButton(item, isActive)}
+                    >
+                      <span>{item.label}</span>
+                      {isActive && <span className="h-2.5 w-2.5 rounded-full bg-white/90" />}
+                    </button>
+                  )
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSidebarOpen(false)
+                    setShowSettingsPanel(true)
+                  }}
+                  className={navButton({ label: 'Settings' }, false)}
+                >
+                  <span>Settings</span>
+                  <span className={`text-xs ${softText}`}>⚙</span>
+                </button>
               </nav>
             </div>
           </div>
         )}
 
-        <main className="flex-1">
+        {/* ---------------- Main ---------------- */}
+        <main className="min-w-0 flex-1">
           <header
             className={
               isDark
-                ? 'border-b border-slate-800/80 bg-slate-900/60 px-4 py-5 backdrop-blur-xl sm:px-6'
-                : 'border-b border-slate-200 bg-white/65 px-4 py-5 shadow-[0_1px_0_rgba(148,163,184,0.2)] backdrop-blur-xl sm:px-6'
+                ? 'sticky top-0 z-30 border-b border-white/10 bg-slate-950/70 px-4 py-5 backdrop-blur-2xl sm:px-6'
+                : 'sticky top-0 z-30 border-b border-slate-900/5 bg-white/70 px-4 py-5 backdrop-blur-2xl sm:px-6'
             }
           >
             <div className="flex items-center justify-between gap-4">
@@ -377,30 +547,56 @@ const money = (value) =>
                 <button
                   type="button"
                   onClick={() => setMobileSidebarOpen(true)}
-                  className={
+                  className={[
+                    'inline-flex h-10 w-10 items-center justify-center rounded-xl border text-lg lg:hidden',
+                    pressable,
                     isDark
-                      ? 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-lg text-slate-100 lg:hidden'
-                      : 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-lg text-slate-700 lg:hidden'
-                  }
+                      ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-sky-400/50 hover:text-sky-300'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:text-sky-600',
+                  ].join(' ')}
                 >
                   ☰
                 </button>
 
                 <div>
-                  <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>Welcome back</p>
-                  <h2 className="text-xl font-bold sm:text-2xl">Dashboard overview</h2>
+                  <p className={`text-sm ${softText}`}>Welcome back</p>
+                  <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Dashboard overview</h2>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium sm:inline-flex ${tonePill.emerald}`}>
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  Live sync
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsPanel(true)}
+                  className={[
+                    'inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium',
+                    pressable,
+                    isDark
+                      ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-sky-400/50 hover:text-sky-300 active:bg-sky-500/20'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:text-sky-600 active:bg-sky-100',
+                  ].join(' ')}
+                >
+                  ⚙ <span className="hidden sm:inline">Settings</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setTheme(isDark ? 'light' : 'dark')}
-                  className={
+                  className={[
+                    'h-10 rounded-full border px-3 text-sm font-medium',
+                    pressable,
                     isDark
-                      ? 'rounded-full border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:-translate-y-0.5 hover:border-sky-500/50'
-                      : 'rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-800 transition hover:-translate-y-0.5 hover:border-sky-300'
-                  }
+                      ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-amber-300/50 hover:text-amber-200 active:bg-amber-400/20'
+                      : 'border-slate-200 bg-white text-slate-800 hover:border-indigo-300 hover:text-indigo-600 active:bg-indigo-100',
+                  ].join(' ')}
                 >
                   {isDark ? '☀️ Light' : '🌙 Dark'}
                 </button>
@@ -408,322 +604,265 @@ const money = (value) =>
                 <button
                   type="button"
                   onClick={() => navigate('/login')}
-                  className="rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-rose-500/20 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-rose-500/30"
+                  className={[
+                    'h-10 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 px-4 text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(244,63,94,0.9)]',
+                    pressable,
+                    'hover:from-rose-600 hover:to-pink-600 active:from-rose-700 active:to-pink-700',
+                  ].join(' ')}
                 >
                   Logout
                 </button>
               </div>
             </div>
           </header>
-         <div
-  className={
-    isDark
-      ? 'rounded-[28px] border border-slate-800/90 bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950 p-6 shadow-[0_25px_60px_rgba(15,23,42,0.45)]'
-      : 'rounded-[28px] border border-slate-200 bg-gradient-to-r from-white via-sky-50 to-emerald-50 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.08)]'
-  }
->
- <h2 className="text-2xl font-bold">
-  {user.first_name}, welcome to NexaFunds 👋
-</h2>
 
-<p className={isDark ? 'mt-3 text-sm text-slate-300' : 'mt-3 text-sm text-slate-600'}>
-  {user.first_name}, welcome to <span className="font-semibold text-sky-500">NexaFunds</span>,
-  where you get to interact with <span className="font-semibold text-emerald-500">
-    {totalUsers} active {totalUsers === 1 ? 'trader' : 'traders'}
-  </span>
-  and follow live portfolio performance as our trading community grows.
-</p>
-</div>
           <div className="space-y-6 px-4 py-6 sm:px-6">
+            {/* Welcome banner */}
+            <div
+              className={
+                isDark
+                  ? 'relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-r from-slate-900/80 via-slate-900/60 to-sky-900/50 p-6 backdrop-blur-xl'
+                  : 'relative overflow-hidden rounded-[28px] border border-slate-900/5 bg-gradient-to-r from-white via-sky-50 to-emerald-50 p-6'
+              }
+            >
+              <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-sky-500/20 blur-3xl" />
+              <h2 className="relative text-2xl font-bold tracking-tight">
+                {user.first_name}, welcome to NexaFunds 👋
+              </h2>
+              <p className={`relative mt-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                {user.first_name}, welcome to <span className="font-semibold text-sky-500">NexaFunds</span>, where you get
+                to interact with{' '}
+                <span className="font-semibold text-emerald-500">
+                  {totalUsers} active {totalUsers === 1 ? 'trader' : 'traders'}
+                </span>{' '}
+                and follow live portfolio performance as our trading community grows.
+              </p>
+            </div>
+
+            {/* MT5 overview */}
             <section className="grid gap-5 xl:grid-cols-[1.6fr_0.8fr]">
               <div
                 className={
                   isDark
-                    ? 'overflow-hidden rounded-[30px] border border-slate-800/90 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 p-6 shadow-[0_30px_60px_rgba(15,23,42,0.45)]'
-                    : 'overflow-hidden rounded-[30px] border border-slate-200 bg-gradient-to-br from-white via-sky-50 to-emerald-50 p-6 shadow-[0_30px_60px_rgba(15,23,42,0.12)]'
+                    ? 'relative overflow-hidden rounded-[30px] border border-white/10 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-sky-950/60 p-6 backdrop-blur-xl'
+                    : 'relative overflow-hidden rounded-[30px] border border-slate-900/5 bg-gradient-to-br from-white via-sky-50 to-emerald-50 p-6'
                 }
               >
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="pointer-events-none absolute -left-20 bottom--10 h-56 w-56 rounded-full bg-emerald-500/15 blur-3xl" />
+                <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <p className={isDark ? 'text-sm uppercase tracking-[0.22em] text-sky-400' : 'text-sm uppercase tracking-[0.22em] text-sky-600'}>
+                    <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
                       MT5 Live Overview
                     </p>
-                    <h3 className="mt-4 text-3xl font-bold">Active MT5 account synced successfully</h3>
-                    <p className={isDark ? 'mt-3 max-w-lg text-sm text-slate-300' : 'mt-3 max-w-lg text-sm text-slate-600'}>
-                      Balance, equity, floating profit, and open positions are updating automatically every 5 seconds from the
-                      currently logged-in MT5 account.
+                    <h3 className="mt-4 text-3xl font-bold tracking-tight">Active MT5 account synced successfully</h3>
+                    <p className={`mt-3 max-w-lg text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                      Balance, equity, floating profit, and open positions are updating automatically every 5 seconds from
+                      the currently logged-in MT5 account.
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-right">
-                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-emerald-300' : 'text-xs uppercase tracking-[0.18em] text-emerald-700'}>
+                  <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-5 py-4 text-right shadow-[0_18px_40px_-24px_rgba(16,185,129,0.9)]">
+                    <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
                       Total Return
                     </p>
-                    <h4 className="mt-2 text-3xl font-bold text-emerald-500">
+                    <h4
+                      className={`mt-2 text-3xl font-bold tabular-nums ${
+                        account.totalReturn >= 0 ? 'text-emerald-500' : 'text-rose-400'
+                      }`}
+                    >
                       {account.totalReturn >= 0 ? '+' : ''}
                       {account.totalReturn.toFixed(2)}%
                     </h4>
                   </div>
                 </div>
 
-                <div className="mt-6 grid gap-4 md:grid-cols-3">
-                  <div className={isDark ? 'rounded-2xl border border-slate-700/80 bg-slate-800/70 p-4' : 'rounded-2xl border border-slate-200 bg-white/70 p-4'}>
-                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>
-                      Open Positions
-                    </p>
-                    <h4 className="mt-3 text-2xl font-bold">{positions.length}</h4>
-                  </div>
-
-                  <div className={isDark ? 'rounded-2xl border border-slate-700/80 bg-slate-800/70 p-4' : 'rounded-2xl border border-slate-200 bg-white/70 p-4'}>
-                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>
-                      Floating P/L
-                    </p>
-                    <h4 className={`mt-3 text-2xl font-bold ${account.totalProfit >= 0 ? 'text-emerald-500' : 'text-rose-400'}`}>
-                      {account.totalProfit >= 0 ? '+' : '-'}
-                      {money(Math.abs(account.totalProfit))}
-                    </h4>
-                  </div>
-
-                  <div className={isDark ? 'rounded-2xl border border-slate-700/80 bg-slate-800/70 p-4' : 'rounded-2xl border border-slate-200 bg-white/70 p-4'}>
-                    <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>
-                      Equity
-                    </p>
-                    <h4 className="mt-3 text-2xl font-bold text-emerald-500">{money(account.portfolioValue)}</h4>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                className={
-                  isDark
-                    ? 'rounded-[30px] border border-slate-800/90 bg-slate-900/70 p-5 shadow-[0_30px_60px_rgba(15,23,42,0.45)]'
-                    : 'rounded-[30px] border border-slate-200 bg-white/70 p-5 shadow-[0_30px_60px_rgba(15,23,42,0.12)]'
-                }
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">MT5 Account</h3>
-                  <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500">Live</span>
-                </div>
-
-                <div className="space-y-3">
+                <div className="relative mt-6 grid gap-4 md:grid-cols-3">
                   {[
-                    { label: 'Balance', node: <span className="font-semibold text-emerald-500">{money(account.currentBalance)}</span> },
-                    { label: 'Equity', node: <span className="font-semibold text-emerald-500">{money(account.portfolioValue)}</span> },
+                    { k: 'Open Positions', v: <span className="text-2xl font-bold tabular-nums">{positions.length}</span> },
                     {
-                      label: 'Floating Profit',
-                      node: (
-                        <span className={`font-semibold ${account.totalProfit >= 0 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                      k: 'Floating P/L',
+                      v: (
+                        <span
+                          className={`text-2xl font-bold tabular-nums ${
+                            account.totalProfit >= 0 ? 'text-emerald-500' : 'text-rose-400'
+                          }`}
+                        >
                           {account.totalProfit >= 0 ? '+' : '-'}
                           {money(Math.abs(account.totalProfit))}
                         </span>
                       ),
                     },
-                    { label: 'Open Positions', node: <span className="font-semibold text-sky-500">{positions.length}</span> },
+                    { k: 'Equity', v: <span className="text-2xl font-bold tabular-nums text-emerald-500">{money(account.portfolioValue)}</span> },
+                  ].map((cell) => (
+                    <div
+                      key={cell.k}
+                      className={[
+                        'rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5',
+                        isDark
+                          ? 'border-white/10 bg-white/[0.04] hover:border-sky-400/40'
+                          : 'border-slate-200 bg-white/80 hover:border-sky-300',
+                      ].join(' ')}
+                    >
+                      <p className={label}>{cell.k}</p>
+                      <h4 className="mt-3">{cell.v}</h4>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`${surface} p-5`}>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">MT5 Account</h3>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tonePill.emerald}`}>Live</span>
+                </div>
+
+                <div className="space-y-3">
+                  {[
+                    { label: 'Balance', node: <span className="font-semibold tabular-nums text-emerald-500">{money(account.currentBalance)}</span> },
+                    { label: 'Equity', node: <span className="font-semibold tabular-nums text-emerald-500">{money(account.portfolioValue)}</span> },
+                    {
+                      label: 'Floating Profit',
+                      node: (
+                        <span className={`font-semibold tabular-nums ${account.totalProfit >= 0 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                          {account.totalProfit >= 0 ? '+' : '-'}
+                          {money(Math.abs(account.totalProfit))}
+                        </span>
+                      ),
+                    },
+                    { label: 'Open Positions', node: <span className="font-semibold tabular-nums text-sky-500">{positions.length}</span> },
                   ].map((row) => (
                     <div
                       key={row.label}
-                      className={
+                      className={[
+                        'flex items-center justify-between rounded-2xl border p-3 transition-colors duration-200',
                         isDark
-                          ? 'flex items-center justify-between rounded-2xl border border-slate-700/80 bg-slate-800/70 p-3'
-                          : 'flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-3'
-                      }
+                          ? 'border-white/10 bg-white/[0.04] hover:border-sky-400/40 hover:bg-sky-500/[0.07]'
+                          : 'border-slate-200 bg-slate-50 hover:border-sky-300 hover:bg-sky-50',
+                      ].join(' ')}
                     >
-                      <span className="font-medium">{row.label}</span>
+                      <span className="text-sm font-medium">{row.label}</span>
                       {row.node}
                     </div>
                   ))}
                 </div>
               </div>
             </section>
-<div className="mt-8">
-  <div className="mb-4">
-    <h2 className="text-xl font-semibold text-white">
-      USD Economic Forecast
-    </h2>
 
-    <p className="text-sm text-gray-400 mt-1">
-      AI-powered forecast based on the latest available economic data.
-    </p>
-  </div>
+            {/* NFP forecast */}
+            <section>
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold tracking-tight">USD Economic Forecast</h2>
+                <p className={`mt-1 text-sm ${softText}`}>AI-powered forecast based on the latest available economic data.</p>
+              </div>
 
-  <div className="bg-[#111827] border border-gray-800 rounded-2xl p-6">
+              <div className={`${surface} p-6`}>
+                <div className="mb-6 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Non-Farm Payrolls (NFP)</h3>
+                    <p className={`mt-1 text-sm ${softText}`}>Next U.S. employment release</p>
+                  </div>
 
-    <div className="flex items-center justify-between mb-6">
-      <div>
-        <h3 className="text-lg font-semibold text-white">
-          Non-Farm Payrolls (NFP)
-        </h3>
+                  {nfpForecast?.forecast_release_date && (
+                    <div className="text-right">
+                      <p className={label}>Release</p>
+                      <p className="mt-1 text-sm font-semibold tabular-nums">{nfpForecast.forecast_release_date}</p>
+                    </div>
+                  )}
+                </div>
 
-        <p className="text-sm text-gray-400 mt-1">
-          Next U.S. employment release
-        </p>
-      </div>
+                {nfpForecast ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {[
+                      {
+                        title: 'AI Forecast',
+                        main: `${Number(nfpForecast.prediction).toFixed(1)}K`,
+                        sub: 'Ensemble prediction',
+                      },
+                      {
+                        title: 'Market Consensus',
+                        main:
+                          nfpForecast.consensus_nfp != null ? `${Number(nfpForecast.consensus_nfp).toFixed(1)}K` : 'N/A',
+                        sub: nfpForecast.consensus_source || 'No consensus available',
+                      },
+                      {
+                        title: 'Expected Surprise',
+                        main:
+                          nfpForecast.expected_surprise != null
+                            ? `${Number(nfpForecast.expected_surprise).toFixed(1)}K`
+                            : 'N/A',
+                        sub: 'AI forecast − consensus',
+                      },
+                      {
+                        title: 'USD Direction',
+                        main: nfpForecast.direction || 'N/A',
+                        sub: `Magnitude: ${nfpForecast.magnitude || 'N/A'}`,
+                      },
+                    ].map((cell) => (
+                      <div
+                        key={cell.title}
+                        className={[
+                          'rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5',
+                          isDark
+                            ? 'border-white/10 bg-white/[0.04] hover:border-sky-400/40'
+                            : 'border-slate-200 bg-slate-50 hover:border-sky-300',
+                        ].join(' ')}
+                      >
+                        <p className={label}>{cell.title}</p>
+                        <p className="mt-2 text-3xl font-bold tabular-nums">{cell.main}</p>
+                        <p className={`mt-2 text-xs ${softText}`}>{cell.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`py-6 text-sm ${softText}`}>Loading NFP forecast...</div>
+                )}
 
-      {nfpForecast?.forecast_release_date && (
-        <div className="text-right">
-          <p className="text-xs text-gray-500">
-            Release
-          </p>
+                {nfpForecast && (
+                  <div
+                    className={`mt-6 flex flex-wrap gap-x-6 gap-y-2 border-t pt-4 text-xs ${
+                      isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-500'
+                    }`}
+                  >
+                    <span>
+                      Reference month:{' '}
+                      {nfpForecast.reference_month
+                        ? new Date(nfpForecast.reference_month).toLocaleDateString('en-US', {
+                            month: 'long',
+                            year: 'numeric',
+                          })
+                        : 'N/A'}
+                    </span>
+                    <span>Information cutoff: {nfpForecast.information_cutoff || 'N/A'}</span>
+                    <span>Training rows: {nfpForecast.training_rows ?? 'N/A'}</span>
+                    <span>Features: {nfpForecast.features ?? 'N/A'}</span>
+                  </div>
+                )}
+              </div>
+            </section>
 
-          <p className="text-sm text-white">
-            {nfpForecast.forecast_release_date}
-          </p>
-        </div>
-      )}
-    </div>
-
-    {nfpForecast ? (
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-
-        {/* AI FORECAST */}
-        <div className="bg-gray-900/60 rounded-xl p-4">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">
-            AI Forecast
-          </p>
-
-          <p className="text-3xl font-bold text-white mt-2">
-            {Number(nfpForecast.prediction).toFixed(1)}K
-          </p>
-
-          <p className="text-xs text-gray-500 mt-2">
-            Ensemble prediction
-          </p>
-        </div>
-
-        {/* CONSENSUS */}
-        <div className="bg-gray-900/60 rounded-xl p-4">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">
-            Market Consensus
-          </p>
-
-          <p className="text-3xl font-bold text-white mt-2">
-            {nfpForecast.consensus_nfp != null
-              ? `${Number(nfpForecast.consensus_nfp).toFixed(1)}K`
-              : 'N/A'}
-          </p>
-
-          <p className="text-xs text-gray-500 mt-2">
-            {nfpForecast.consensus_source || 'No consensus available'}
-          </p>
-        </div>
-
-        {/* EXPECTED SURPRISE */}
-        <div className="bg-gray-900/60 rounded-xl p-4">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">
-            Expected Surprise
-          </p>
-
-          <p className="text-3xl font-bold text-white mt-2">
-            {nfpForecast.expected_surprise != null
-              ? `${Number(nfpForecast.expected_surprise).toFixed(1)}K`
-              : 'N/A'}
-          </p>
-
-          <p className="text-xs text-gray-500 mt-2">
-            AI forecast − consensus
-          </p>
-        </div>
-
-        {/* USD DIRECTION */}
-        <div className="bg-gray-900/60 rounded-xl p-4">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">
-            USD Direction
-          </p>
-
-          <p className="text-2xl font-bold text-white mt-3">
-            {nfpForecast.direction || 'N/A'}
-          </p>
-
-          <p className="text-xs text-gray-500 mt-2">
-            Magnitude:{' '}
-            {nfpForecast.magnitude || 'N/A'}
-          </p>
-        </div>
-
-      </div>
-
-    ) : (
-
-      <div className="text-sm text-gray-400 py-6">
-        Loading NFP forecast...
-      </div>
-
-    )}
-
-    {nfpForecast && (
-      <div className="mt-6 pt-4 border-t border-gray-800 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-500">
-
-        <span>
-          Reference month:{' '}
-          {nfpForecast.reference_month
-            ? new Date(nfpForecast.reference_month).toLocaleDateString(
-                'en-US',
-                {
-                  month: 'long',
-                  year: 'numeric'
-                }
-              )
-            : 'N/A'}
-        </span>
-
-        <span>
-          Information cutoff:{' '}
-          {nfpForecast.information_cutoff || 'N/A'}
-        </span>
-
-        <span>
-          Training rows:{' '}
-          {nfpForecast.training_rows ?? 'N/A'}
-        </span>
-
-        <span>
-          Features:{' '}
-          {nfpForecast.features ?? 'N/A'}
-        </span>
-
-      </div>
-    )}
-
-  </div>
-</div>
+            {/* Access cards */}
             <section className="grid gap-4 md:grid-cols-2">
               {accessCards.map((card) => (
-                <div
-                  key={card.label}
-                  className={
-                    isDark
-                      ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.28)] backdrop-blur-xl'
-                      : 'rounded-3xl border border-slate-200 bg-white/75 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)] backdrop-blur-xl'
-                  }
-                >
+                <div key={card.label} className={`${surface} p-5 transition-transform duration-200 hover:-translate-y-0.5`}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className={isDark ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>
-                        {card.label}
-                      </p>
-                      <h4 className="mt-2 text-2xl font-bold">{card.value}</h4>
+                      <p className={label}>{card.label}</p>
+                      <h4 className="mt-2 text-2xl font-bold tracking-tight">{card.value}</h4>
                     </div>
-                    <span
-                      className={
-                        card.tone === 'sky'
-                          ? 'rounded-full bg-sky-500/10 px-2 py-1 text-xs font-medium text-sky-500'
-                          : 'rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500'
-                      }
-                    >
-                      Active
-                    </span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tonePill[card.tone]}`}>Active</span>
                   </div>
-                  <p className={isDark ? 'mt-3 text-sm text-slate-300' : 'mt-3 text-sm text-slate-600'}>{card.detail}</p>
+                  <p className={`mt-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{card.detail}</p>
                   <a
                     href={card.actionUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className={
+                    className={[
+                      'mt-4 inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold text-white',
+                      pressable,
                       card.tone === 'sky'
-                        ? 'mt-4 inline-flex items-center justify-center rounded-xl bg-sky-600 px-3 py-2 text-sm font-medium text-white shadow-lg shadow-sky-600/20 transition hover:-translate-y-0.5'
-                        : 'mt-4 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5'
-                    }
+                        ? 'bg-gradient-to-r from-sky-600 to-cyan-500 shadow-[0_14px_30px_-14px_rgba(14,165,233,0.9)] hover:from-sky-500 hover:to-cyan-400 active:from-sky-700 active:to-cyan-600'
+                        : 'bg-gradient-to-r from-emerald-600 to-teal-500 shadow-[0_14px_30px_-14px_rgba(16,185,129,0.9)] hover:from-emerald-500 hover:to-teal-400 active:from-emerald-700 active:to-teal-600',
+                    ].join(' ')}
                   >
                     {card.actionLabel}
                   </a>
@@ -731,62 +870,52 @@ const money = (value) =>
               ))}
             </section>
 
+            {/* Stats */}
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {stats.map((item) => (
                 <div
                   key={item.label}
-                  className={
-                    isDark
-                      ? 'group rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.35)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-sky-500/30'
-                      : 'group rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-sky-200'
-                  }
+                  className={`${surface} group p-5 transition-all duration-300 hover:-translate-y-1 ${
+                    isDark ? 'hover:border-sky-400/40' : 'hover:border-sky-300'
+                  }`}
                 >
                   <div className="flex items-center justify-between">
-                    <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>{item.label}</p>
-                    <span
-                      className={
-                        item.tone === 'emerald'
-                          ? 'rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500'
-                          : item.tone === 'blue'
-                            ? 'rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500'
-                            : item.tone === 'violet'
-                              ? 'rounded-full bg-violet-500/10 px-2 py-1 text-xs font-medium text-violet-500'
-                              : 'rounded-full bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-500'
-                      }
-                    >
+                    <p className={`text-sm ${softText}`}>{item.label}</p>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tonePill[item.tone]}`}>
                       {item.change}
                     </span>
                   </div>
-                  <h3 className="mt-4 text-3xl font-bold">{item.value}</h3>
+                  <h3 className="mt-4 text-3xl font-bold tabular-nums tracking-tight">{item.value}</h3>
+                  <div className={`mt-4 h-1 w-full overflow-hidden rounded-full ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
+                    <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all duration-500 group-hover:w-full" />
+                  </div>
                 </div>
               ))}
             </section>
 
+            {/* Chart + activity */}
             <section className="grid gap-6 2xl:grid-cols-[1.4fr_0.8fr]">
-              <div
-                className={
-                  isDark
-                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl'
-                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl'
-                }
-              >
+              <div className={`${surface} p-5`}>
                 <div className="mb-6 flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-xl font-semibold">Portfolio performance</h3>
-                    <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>Track growth over the last 8 months</p>
+                    <h3 className="text-xl font-semibold tracking-tight">Portfolio performance</h3>
+                    <p className={`text-sm ${softText}`}>Track growth over the last 8 months</p>
                   </div>
-                  <div className="flex gap-2 text-xs font-medium">
-                    {['3M', '6M', '1Y'].map((range, index) => (
+                  <div className={`flex gap-1 rounded-2xl p-1 text-xs font-semibold ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`}>
+                    {['3M', '6M', '1Y'].map((range) => (
                       <button
                         key={range}
                         type="button"
-                        className={
-                          index === 0
-                            ? 'rounded-xl bg-blue-600 px-3 py-1.5 text-white shadow-md shadow-blue-600/20'
+                        onClick={() => setActiveRange(range)}
+                        className={[
+                          'rounded-xl px-3 py-1.5',
+                          pressable,
+                          activeRange === range
+                            ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-[0_10px_24px_-12px_rgba(14,165,233,0.9)]'
                             : isDark
-                              ? 'rounded-xl bg-slate-800 px-3 py-1.5 text-slate-300'
-                              : 'rounded-xl bg-slate-100 px-3 py-1.5 text-slate-600'
-                        }
+                              ? 'text-slate-300 hover:bg-white/10 hover:text-white'
+                              : 'text-slate-600 hover:bg-white hover:text-slate-900',
+                        ].join(' ')}
                       >
                         {range}
                       </button>
@@ -797,7 +926,7 @@ const money = (value) =>
                 <div
                   className={
                     isDark
-                      ? 'relative overflow-hidden rounded-[28px] border border-slate-700/80 bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-6'
+                      ? 'relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 p-6'
                       : 'relative overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-6'
                   }
                 >
@@ -811,11 +940,12 @@ const money = (value) =>
                           y1={40 + line * 45}
                           x2="700"
                           y2={40 + line * 45}
-                          stroke={isDark ? 'rgba(148,163,184,0.2)' : 'rgba(148,163,184,0.45)'}
+                          stroke={isDark ? 'rgba(148,163,184,0.18)' : 'rgba(148,163,184,0.40)'}
                           strokeWidth="1"
+                          strokeDasharray="4 6"
                         />
                       ))}
-                      <path d={chartPath} fill="url(#chartGradient)" opacity="0.25" />
+                      <path d={chartPath} fill="url(#chartGradient)" opacity="0.28" />
                       <path
                         d={chartPath.replace('Z', '')}
                         fill="none"
@@ -825,9 +955,9 @@ const money = (value) =>
                         strokeLinejoin="round"
                       />
                       <defs>
-                        <linearGradient id="chartGradient" x1="0" y1="0" x2="1" y2="0">
-                          <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.7" />
-                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.7" />
+                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.85" />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.05" />
                         </linearGradient>
                         <linearGradient id="chartStroke" x1="0" y1="0" x2="1" y2="0">
                           <stop offset="0%" stopColor="#38bdf8" />
@@ -839,106 +969,104 @@ const money = (value) =>
                 </div>
               </div>
 
-              <div
-                className={
-                  isDark
-                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl'
-                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl'
-                }
-              >
-                <h3 className="text-lg font-semibold">Recent activity</h3>
-                <div className="mt-5 space-y-4">
+              <div className={`${surface} p-5`}>
+                <h3 className="text-lg font-semibold tracking-tight">Recent activity</h3>
+                <div className="mt-5 space-y-1">
                   {activity.map((item) => (
                     <div
                       key={item.title}
-                      className={
-                        isDark
-                          ? 'flex items-start justify-between gap-3 border-b border-slate-700 pb-3 last:border-0 last:pb-0'
-                          : 'flex items-start justify-between gap-3 border-b border-slate-200 pb-3 last:border-0 last:pb-0'
-                      }
+                      className={[
+                        'flex items-start justify-between gap-3 rounded-2xl px-3 py-3 transition-colors duration-200',
+                        isDark ? 'hover:bg-white/[0.06] active:bg-sky-500/15' : 'hover:bg-slate-100 active:bg-sky-100',
+                      ].join(' ')}
                     >
                       <div>
-                        <p className="font-medium">{item.title}</p>
-                        <p className={isDark ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>{item.time}</p>
+                        <p className="text-sm font-medium">{item.title}</p>
+                        <p className={`text-xs ${softText}`}>{item.time}</p>
                       </div>
-                      <span className={isDark ? 'text-sm font-medium text-sky-400' : 'text-sm font-medium text-sky-600'}>{item.value}</span>
+                      <span className={`text-sm font-semibold ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>{item.value}</span>
                     </div>
                   ))}
                 </div>
               </div>
             </section>
 
+            {/* EA + account status */}
             <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <div
-                className={
-                  isDark
-                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl'
-                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl'
-                }
-              >
-                <div className="mb-5 flex items-center justify-between">
+              <div className={`${surface} p-5`}>
+                <div className="mb-5 flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-xl font-semibold">EA in use</h3>
-                    <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>Current trading system and update status</p>
+                    <h3 className="text-xl font-semibold tracking-tight">EA in use</h3>
+                    <p className={`text-sm ${softText}`}>Current trading system and update status</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowSettingsModal(true)}
-                    className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition duration-200 hover:-translate-y-0.5"
+                    className={[
+                      'rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_30px_-14px_rgba(37,99,235,0.9)]',
+                      pressable,
+                      'hover:from-blue-500 hover:to-cyan-400 active:from-blue-700 active:to-cyan-600',
+                    ].join(' ')}
                   >
                     Update EA
                   </button>
                 </div>
 
-                <div className={isDark ? 'rounded-2xl border border-slate-700 bg-slate-800/80 p-5' : 'rounded-2xl border border-slate-200 bg-slate-50 p-5'}>
+                <div
+                  className={
+                    isDark
+                      ? 'rounded-2xl border border-white/10 bg-white/[0.04] p-5'
+                      : 'rounded-2xl border border-slate-200 bg-slate-50 p-5'
+                  }
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>Active strategy</p>
-                      <h4 className="mt-1 text-2xl font-bold">{eaSettings.ea_name}</h4>
+                      <p className={`text-sm ${softText}`}>Active strategy</p>
+                      <h4 className="mt-1 text-2xl font-bold tracking-tight">{eaSettings.ea_name}</h4>
                     </div>
-                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-500">{eaSettings.ea_status}</span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${tonePill.emerald}`}>
+                      {eaSettings.ea_status}
+                    </span>
                   </div>
 
                   <div className="mt-5 space-y-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>Risk profile</span>
-                      <span className="font-medium text-amber-500">{eaSettings.ea_risk}</span>
+                      <span className={softText}>Risk profile</span>
+                      <span className="font-semibold text-amber-500">{eaSettings.ea_risk}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>Max drawdown</span>
-                      <span className="font-medium">{eaSettings.ea_drawdown}%</span>
+                      <span className={softText}>Max drawdown</span>
+                      <span className="font-semibold tabular-nums">{eaSettings.ea_drawdown}%</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>Auto trading</span>
-                      <span className="font-medium text-emerald-500">{eaSettings.auto_trade ? 'On' : 'Off'}</span>
+                      <span className={softText}>Auto trading</span>
+                      <span className={`font-semibold ${eaSettings.auto_trade ? 'text-emerald-500' : 'text-rose-400'}`}>
+                        {eaSettings.auto_trade ? 'On' : 'Off'}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div
-                className={
-                  isDark
-                    ? 'rounded-3xl border border-slate-800/80 bg-slate-900/60 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.32)] backdrop-blur-xl'
-                    : 'rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl'
-                }
-              >
-                <h3 className="text-xl font-semibold">Account status</h3>
+              <div className={`${surface} p-5`}>
+                <h3 className="text-xl font-semibold tracking-tight">Account status</h3>
                 <div className="mt-5 space-y-4">
-                  <div className={isDark ? 'rounded-2xl bg-slate-800/80 p-4' : 'rounded-2xl bg-slate-50 p-4'}>
-                    <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>Registered investors</p>
-                    <h4 className="mt-2 text-3xl font-bold text-blue-500">{totalUsers}</h4>
-                  </div>
-
-                  <div className={isDark ? 'rounded-2xl bg-slate-800/80 p-4' : 'rounded-2xl bg-slate-50 p-4'}>
-                    <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>Monthly gain</p>
-                    <h4 className="mt-2 text-3xl font-bold text-emerald-500">+{account.monthlyGain || 12.5}%</h4>
-                  </div>
-
-                  <div className={isDark ? 'rounded-2xl bg-slate-800/80 p-4' : 'rounded-2xl bg-slate-50 p-4'}>
-                    <p className={isDark ? 'text-sm text-slate-400' : 'text-sm text-slate-500'}>All-time return</p>
-                    <h4 className="mt-2 text-3xl font-bold text-emerald-500">+48.7%</h4>
-                  </div>
+                  {[
+                    { k: 'Registered investors', v: totalUsers, cls: 'text-blue-500' },
+                    { k: 'Monthly gain', v: `+${account.monthlyGain || 12.5}%`, cls: 'text-emerald-500' },
+                    { k: 'All-time return', v: '+48.7%', cls: 'text-emerald-500' },
+                  ].map((row) => (
+                    <div
+                      key={row.k}
+                      className={[
+                        'rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5',
+                        isDark ? 'border-white/10 bg-white/[0.04] hover:border-sky-400/40' : 'border-slate-200 bg-slate-50 hover:border-sky-300',
+                      ].join(' ')}
+                    >
+                      <p className={`text-sm ${softText}`}>{row.k}</p>
+                      <h4 className={`mt-2 text-3xl font-bold tabular-nums ${row.cls}`}>{row.v}</h4>
+                    </div>
+                  ))}
                 </div>
               </div>
             </section>
@@ -946,125 +1074,163 @@ const money = (value) =>
         </main>
       </div>
 
-      {showSettingsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className={isDark ? 'w-full max-w-xl rounded-[28px] border border-slate-700 bg-slate-900 p-6 shadow-2xl' : 'w-full max-w-xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl'}>
-            <div className="mb-5 flex items-center justify-between">
+      {/* ---------------- Slide-in settings panel ---------------- */}
+      {showSettingsPanel && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowSettingsPanel(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={[
+              'h-full w-full max-w-md overflow-y-auto border-l p-6 shadow-2xl',
+              'animate-[slideIn_0.25s_ease-out]',
+              isDark ? 'border-white/10 bg-slate-950/95 text-slate-100' : 'border-slate-200 bg-white text-slate-900',
+            ].join(' ')}
+            style={{ animationName: 'none' }}
+          >
+            <div className="mb-6 flex items-start justify-between">
               <div>
-                <p className={isDark ? 'text-sm uppercase tracking-[0.18em] text-sky-400' : 'text-sm uppercase tracking-[0.18em] text-sky-600'}>
-                  Trading settings
+                <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
+                  Settings panel
                 </p>
-                <h3 className="mt-2 text-2xl font-bold">EA controls</h3>
+                <h3 className="mt-2 text-2xl font-bold tracking-tight">Preferences</h3>
               </div>
-              <button type="button" onClick={() => setShowSettingsModal(false)} className={isDark ? 'text-slate-300' : 'text-slate-600'}>
+              <button
+                type="button"
+                onClick={() => setShowSettingsPanel(false)}
+                className={`${pressable} rounded-lg px-2 py-1 ${isDark ? 'text-slate-300 hover:bg-white/10' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className={isDark ? 'mb-2 block text-sm text-slate-300' : 'mb-2 block text-sm text-slate-600'}>Strategy name</label>
-                <input
-                  type="text"
-                  value={eaSettings.ea_name}
-                  onChange={(event) => setEaSettings({ ...eaSettings, ea_name: event.target.value })}
-                  className={isDark ? 'w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-slate-100 outline-none' : 'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none'}
-                />
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className={isDark ? 'mb-2 block text-sm text-slate-300' : 'mb-2 block text-sm text-slate-600'}>Risk profile</label>
-                  <select
-                    value={eaSettings.ea_risk}
-                    onChange={(event) => setEaSettings({ ...eaSettings, ea_risk: event.target.value })}
-                    className={isDark ? 'w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-slate-100 outline-none' : 'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none'}
+            {/* Appearance */}
+            <div className="mb-6">
+              <p className={label}>Appearance</p>
+              <div className={`mt-3 flex gap-1 rounded-2xl p-1 ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`}>
+                {['dark', 'light'].map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setTheme(mode)}
+                    className={[
+                      'flex-1 rounded-xl px-3 py-2 text-sm font-semibold capitalize',
+                      pressable,
+                      theme === mode
+                        ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white'
+                        : isDark
+                          ? 'text-slate-300 hover:bg-white/10'
+                          : 'text-slate-600 hover:bg-white',
+                    ].join(' ')}
                   >
-                    <option value="Low">Low</option>
-                    <option value="Moderate">Moderate</option>
-                    <option value="High">High</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className={isDark ? 'mb-2 block text-sm text-slate-300' : 'mb-2 block text-sm text-slate-600'}>Max drawdown %</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={eaSettings.ea_drawdown}
-                    onChange={(event) => setEaSettings({ ...eaSettings, ea_drawdown: event.target.value })}
-                    className={isDark ? 'w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-slate-100 outline-none' : 'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none'}
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className={isDark ? 'mb-2 block text-sm text-slate-300' : 'mb-2 block text-sm text-slate-600'}>EA status</label>
-                  <select
-                    value={eaSettings.ea_status}
-                    onChange={(event) => setEaSettings({ ...eaSettings, ea_status: event.target.value })}
-                    className={isDark ? 'w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-slate-100 outline-none' : 'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none'}
-                  >
-                    <option value="Live">Live</option>
-                    <option value="Standby">Standby</option>
-                    <option value="Paused">Paused</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className={isDark ? 'mb-2 block text-sm text-slate-300' : 'mb-2 block text-sm text-slate-600'}>Max order size</label>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    value={eaSettings.max_order_size}
-                    onChange={(event) => setEaSettings({ ...eaSettings, max_order_size: event.target.value })}
-                    className={isDark ? 'w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-slate-100 outline-none' : 'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none'}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {[
-                  { key: 'auto_trade', label: 'Auto-trading' },
-                  { key: 'push_notifications', label: 'Push notifications' },
-                  { key: 'pamm_access', label: 'PAMM access' },
-                  { key: 'broker_access', label: 'Broker access' },
-                ].map((toggle) => (
-                  <label
-                    key={toggle.key}
-                    className={
-                      isDark
-                        ? 'flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100'
-                        : 'flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800'
-                    }
-                  >
-                    <span>{toggle.label}</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(eaSettings[toggle.key])}
-                      onChange={(event) => setEaSettings({ ...eaSettings, [toggle.key]: event.target.checked })}
-                      className="h-4 w-4 rounded"
-                    />
-                  </label>
+                    {mode}
+                  </button>
                 ))}
               </div>
             </div>
+
+            {/* Quick nav */}
+            <div className="mb-6">
+              <p className={label}>Navigate</p>
+              <div className="mt-3 space-y-2">
+                {navItems.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      setShowSettingsPanel(false)
+                      goTo(item.label)
+                    }}
+                    className={navButton(item, activeNav === item.label)}
+                  >
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* EA controls */}
+            <p className={`${label} mb-3`}>EA controls</p>
+            {settingsForm}
+
+            <div className="mt-6 flex justify-end gap-3 pb-4">
+              <button
+                type="button"
+                onClick={() => setShowSettingsPanel(false)}
+                className={[
+                  'rounded-xl border px-4 py-2.5 text-sm font-medium',
+                  pressable,
+                  isDark ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:bg-white/10' : 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200',
+                ].join(' ')}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={saveEaSettings}
+                className={[
+                  'rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_14px_30px_-14px_rgba(37,99,235,0.9)]',
+                  pressable,
+                  'hover:from-blue-500 hover:to-cyan-400 active:from-blue-700 active:to-cyan-600',
+                ].join(' ')}
+              >
+                Save settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- EA modal ---------------- */}
+      {showSettingsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          onClick={() => setShowSettingsModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={
+              isDark
+                ? 'max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[28px] border border-white/10 bg-slate-950/95 p-6 shadow-2xl'
+                : 'max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl'
+            }
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
+                  Trading settings
+                </p>
+                <h3 className="mt-2 text-2xl font-bold tracking-tight">EA controls</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(false)}
+                className={`${pressable} rounded-lg px-2 py-1 ${isDark ? 'text-slate-300 hover:bg-white/10' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                ✕
+              </button>
+            </div>
+
+            {settingsForm}
 
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setShowSettingsModal(false)}
-                className={isDark ? 'rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-100' : 'rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700'}
+                className={[
+                  'rounded-xl border px-4 py-2.5 text-sm font-medium',
+                  pressable,
+                  isDark ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:bg-white/10' : 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200',
+                ].join(' ')}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={saveEaSettings}
-                className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/20"
+                className={[
+                  'rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_14px_30px_-14px_rgba(37,99,235,0.9)]',
+                  pressable,
+                  'hover:from-blue-500 hover:to-cyan-400 active:from-blue-700 active:to-cyan-600',
+                ].join(' ')}
               >
                 Save settings
               </button>
