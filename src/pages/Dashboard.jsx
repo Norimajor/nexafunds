@@ -423,7 +423,7 @@ const goTo = (labelName) => {
     <div
       className={
         isDark
-          ? 'relative min-h-screen overflow-x-hidden bg-[#020817] text-slate-100'
+          ? 'relative min-h-screen overflow-x-hidden bg-transparent text-slate-100'
           : 'relative min-h-screen overflow-x-hidden bg-[#eef2f8] text-slate-900'
       }
     >
@@ -431,12 +431,12 @@ const goTo = (labelName) => {
       <div
         className={
           isDark
-            ? 'pointer-events-none fixed inset-0 bg-[#020817]/45 bg-[url(/assets/nexafunds-dashboard-bg.svg)] bg-cover bg-center bg-fixed'
+            ? 'pointer-events-none fixed inset-0 bg-[url(/assets/nexafunds-dashboard-bg.svg)] bg-cover bg-center bg-fixed'
             : 'pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.22),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(129,140,248,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.16),transparent_60%)]'
         }
       />
       <div
-        className="pointer-events-none fixed inset-0 bg-[linear-gradient(115deg,rgba(2,8,23,0.96)_0%,rgba(2,8,23,0.58)_42%,rgba(4,10,28,0.80)_100%),radial-gradient(circle_at_70%_15%,rgba(16,170,255,0.18),transparent_38%)]"
+        className="pointer-events-none fixed inset-0 bg-[linear-gradient(115deg,rgba(2,8,23,0.58)_0%,rgba(2,8,23,0.28)_42%,rgba(4,10,28,0.48)_100%),radial-gradient(circle_at_70%_15%,rgba(16,170,255,0.12),transparent_38%)]"
       />
       <div className="pointer-events-none fixed inset-0 opacity-[0.22] [background-image:linear-gradient(to_right,rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
 
@@ -445,7 +445,7 @@ const goTo = (labelName) => {
         <aside
           className={
             isDark
-              ? 'hidden min-h-screen w-72 shrink-0 border-r border-sky-200/10 bg-[#030d25]/80 p-6 shadow-[12px_0_60px_-35px_rgba(16,185,255,0.7)] backdrop-blur-2xl lg:flex lg:flex-col'
+              ? 'hidden min-h-screen w-72 shrink-0 border-r border-sky-200/10 bg-[#030d25]/55 p-6 shadow-[12px_0_60px_-35px_rgba(16,185,255,0.7)] backdrop-blur-2xl lg:flex lg:flex-col'
               : 'hidden min-h-screen w-72 shrink-0 border-r border-slate-900/5 bg-white/70 p-6 backdrop-blur-2xl lg:flex lg:flex-col'
           }
         >
