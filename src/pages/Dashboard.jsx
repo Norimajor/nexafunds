@@ -203,6 +203,7 @@ export default function Dashboard() {
   }
 
   const formatNfpValue = (value) => {
+    if (value == null) return 'N/A'
     const number = Number(value)
     return Number.isFinite(number) ? `${number.toFixed(1)}K` : 'N/A'
   }
@@ -224,6 +225,7 @@ export default function Dashboard() {
             ...nfpForecast,
             prediction: nfpForecast.nfp_prediction,
             consensus: nfpForecast.consensus_nfp,
+            surprise: nfpForecast.expected_surprise,
             direction: nfpForecast.surprise_direction,
           }
         : null,
@@ -835,8 +837,11 @@ const goTo = (labelName) => {
                 {predictorCards.map((predictor) => {
                   const forecast = predictor.data
                   const consensus = forecast?.consensus ?? forecast?.consensus_nfp
-                  const surprise = forecast?.expected_surprise
-                  const signalTone = forecast?.direction === 'Bearish' ? 'text-rose-400' : 'text-emerald-500'
+                  const surprise = forecast?.surprise ?? forecast?.expected_surprise
+                  const signalTone =
+                    forecast?.direction === 'Bearish' || forecast?.direction === 'bearish'
+                      ? 'text-rose-400'
+                      : 'text-emerald-500'
 
                   return (
                     <article
@@ -857,10 +862,19 @@ const goTo = (labelName) => {
                       </div>
 
                       {predictor.key === 'nfp' && nfpLoading ? (
-                        <div className={`mt-8 py-6 text-sm ${softText}`}>Loading USDNewsAI forecast...</div>
-                      ) : predictor.key === 'nfp' && nfpError ? (
-                        <div className="mt-8 rounded-2xl border border-amber-400/20 bg-amber-400/5 px-4 py-5 text-sm text-amber-200">
-                          {nfpError}
+                        <div className={`mt-8 flex items-center gap-3 py-6 text-sm ${softText}`}>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
+                          Loading USDNewsAI forecast...
+                        </div>
+                      ) : predictor.key === 'nfp' && (nfpError || !forecast) ? (
+                        <div
+                          className={`mt-8 rounded-2xl border px-4 py-5 text-sm ${
+                            isDark
+                              ? 'border-amber-400/20 bg-amber-400/5 text-amber-200/90'
+                              : 'border-amber-300/60 bg-amber-50 text-amber-700'
+                          }`}
+                        >
+                          NFP forecast is temporarily unavailable. The rest of the dashboard is unaffected.
                         </div>
                       ) : forecast ? (
                         <>
@@ -891,36 +905,28 @@ const goTo = (labelName) => {
                 })}
               </div>
 
+              {/* NFP technical details (USDNewsAI model metadata) */}
               {nfpForecast && (
-                <div className={`mt-4 flex flex-wrap gap-x-5 gap-y-2 px-1 text-xs ${softText}`}>
-                  <span>Model: {nfpForecast.model || 'N/A'}</span>
-                  <span>Release: {formatDate(nfpForecast.forecast_release_date)}</span>
-                  <span>Reference: {formatDate(nfpForecast.reference_month)}</span>
-                  <span>Cutoff: {formatDate(nfpForecast.information_cutoff)}</span>
-                  <span>Training rows: {nfpForecast.training_rows ?? 'N/A'}</span>
-                  <span>Features: {nfpForecast.feature_count ?? 'N/A'}</span>
-                </div>
-              )}
-
-              {nfpForecast && (
-                <div className={`${surface} mt-4 grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4`}>
-                  {[
-                    ['NFP forecast', formatNfpValue(nfpForecast.nfp_prediction)],
-                    ['Ridge prediction', formatNfpValue(nfpForecast.ridge_prediction)],
-                    ['Random forest', formatNfpValue(nfpForecast.rf_prediction)],
-                    ['Gradient boosting', formatNfpValue(nfpForecast.gb_prediction)],
-                    ['Forecast release date', formatDate(nfpForecast.forecast_release_date)],
-                    ['Reference month', formatDate(nfpForecast.reference_month)],
-                    ['Information cutoff', formatDate(nfpForecast.information_cutoff)],
-                    ['Model', nfpForecast.model || 'N/A'],
-                    ['Training rows', nfpForecast.training_rows ?? 'N/A'],
-                    ['Feature count', nfpForecast.feature_count ?? 'N/A'],
-                  ].map(([title, value]) => (
-                    <div key={title}>
-                      <p className={label}>{title}</p>
-                      <p className="mt-2 text-sm font-semibold tabular-nums">{value}</p>
-                    </div>
-                  ))}
+                <div className={`${surface} mt-4 p-5`}>
+                  <p className={label}>NFP model details</p>
+                  <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {[
+                      ['Model', nfpForecast.model || 'N/A'],
+                      ['Forecast release date', formatDate(nfpForecast.forecast_release_date)],
+                      ['Reference month', formatDate(nfpForecast.reference_month)],
+                      ['Information cutoff', formatDate(nfpForecast.information_cutoff)],
+                      ['Training rows', nfpForecast.training_rows ?? 'N/A'],
+                      ['Feature count', nfpForecast.feature_count ?? 'N/A'],
+                      ['Ridge prediction', formatNfpValue(nfpForecast.ridge_prediction)],
+                      ['Random forest prediction', formatNfpValue(nfpForecast.rf_prediction)],
+                      ['Gradient boosting prediction', formatNfpValue(nfpForecast.gb_prediction)],
+                    ].map(([title, value]) => (
+                      <div key={title}>
+                        <p className={`text-xs ${softText}`}>{title}</p>
+                        <p className="mt-1 text-sm font-semibold tabular-nums">{value}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </section>
