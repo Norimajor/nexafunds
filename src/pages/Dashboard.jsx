@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, LayoutDashboard, LogOut, Menu, Settings2, Sun, Moon } from 'lucide-react'
+import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, Eye, EyeOff, LayoutDashboard, LogOut, Menu, Settings2, Sun, Moon } from 'lucide-react'
 import { useNfpForecast } from '../hooks/useNfpForecast'
 
 const navItems = [
@@ -35,6 +35,8 @@ export default function Dashboard() {
   )
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [marketVisualVisible, setMarketVisualVisible] = useState(true)
+  const [marketVisualFailed, setMarketVisualFailed] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showSettingsPanel, setShowSettingsPanel] = useState(false)
   const [activeNav, setActiveNav] = useState('Overview')
@@ -450,19 +452,23 @@ const goTo = (labelName) => {
       }
     >
       {/* Layered market background */}
-      <div
-        className={
-          isDark
-            ? 'pointer-events-none fixed inset-0 bg-[url(/assets/stock-trading-bg.jpg)] bg-cover bg-center bg-fixed'
-            : 'pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.22),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(129,140,248,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.16),transparent_60%)]'
-        }
-      />
-      <div
-        className="pointer-events-none fixed inset-0 bg-[linear-gradient(115deg,rgba(2,8,23,0.58)_0%,rgba(2,8,23,0.28)_42%,rgba(4,10,28,0.48)_100%),radial-gradient(circle_at_70%_15%,rgba(16,170,255,0.12),transparent_38%)]"
-      />
-      <div className="pointer-events-none fixed inset-0 opacity-[0.22] [background-image:linear-gradient(to_right,rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.22),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(129,140,248,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.16),transparent_60%)]">
+        {isDark && !marketVisualFailed && (
+          <img
+            src="/assets/stock-trading-bg.jpg"
+            alt=""
+            loading="lazy"
+            onError={() => setMarketVisualFailed(true)}
+            className={`absolute inset-0 h-full w-full object-cover object-center transition-transform duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+              marketVisualVisible ? 'translate-x-0' : 'translate-x-full'
+            }`}
+          />
+        )}
+        <div className="absolute inset-0 bg-[linear-gradient(115deg,rgba(2,8,23,0.78)_0%,rgba(2,8,23,0.42)_42%,rgba(4,10,28,0.72)_100%),radial-gradient(circle_at_70%_15%,rgba(16,170,255,0.12),transparent_38%)]" />
+        <div className="absolute inset-0 opacity-[0.22] [background-image:linear-gradient(to_right,rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
+      </div>
 
-      <div className="relative mx-auto flex min-h-screen max-w-[1680px]">
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-[1680px]">
         {/* ---------------- Sidebar ---------------- */}
         <aside
           className={
@@ -611,9 +617,21 @@ const goTo = (labelName) => {
                 : 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-slate-900/5 bg-white/70 px-4 py-4 backdrop-blur-2xl sm:px-6 sm:py-5'
             }
           >
-            <div className="pointer-events-none absolute inset-0 bg-[url(/assets/stock-trading-bg.jpg)] bg-cover bg-center opacity-[0.07]" />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-blue-500/0 via-cyan-400/60 to-violet-500/0" />
-            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              type="button"
+              onClick={() => setMarketVisualVisible((visible) => !visible)}
+              aria-label={marketVisualVisible ? 'Hide market background' : 'Show market background'}
+              title={marketVisualVisible ? 'Hide market background' : 'Show market background'}
+              className={`absolute right-2 top-1/2 z-10 inline-flex h-9 w-7 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 text-slate-300 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 sm:right-3 sm:h-10 sm:w-8 ${
+                isDark
+                  ? 'border-white/10 bg-slate-950/70 hover:bg-cyan-400/10 hover:text-cyan-200'
+                  : 'border-slate-200 bg-white/80 text-slate-600 hover:bg-sky-50 hover:text-sky-600'
+              }`}
+            >
+              {marketVisualVisible ? <EyeOff size={15} strokeWidth={1.8} /> : <Eye size={15} strokeWidth={1.8} />}
+            </button>
+            <div className="relative flex flex-col gap-4 pr-8 sm:flex-row sm:items-center sm:justify-between sm:pr-10">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
