@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, LayoutDashboard, LogOut, Menu, Settings2, Sun, Moon } from 'lucide-react'
+import { useNfpForecast } from '../hooks/useNfpForecast'
 
 const navItems = [
   { label: 'Overview', active: true, icon: LayoutDashboard },
@@ -52,8 +53,8 @@ export default function Dashboard() {
   const [totalUsers, setTotalUsers] = useState(0)
   const [user, setUser] = useState({ first_name: 'Investor' })
   const [positions, setPositions] = useState([])
-  const [nfpForecast, setNfpForecast] = useState(null)
   const [economicForecasts, setEconomicForecasts] = useState(null)
+  const { forecast: nfpForecast, loading: nfpLoading, error: nfpError } = useNfpForecast()
 
   const [eaStats, setEaStats] = useState({
     activeStrategy: 'Unknown',
@@ -149,18 +150,6 @@ export default function Dashboard() {
       }
     }
 
-    const fetchNfpForecast = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/nfp/latest`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        const data = await response.json()
-        setNfpForecast(data)
-      } catch (error) {
-        console.error('Failed to fetch NFP forecast:', error)
-        setNfpForecast(null)
-      }
-    }
-
     const fetchEconomicForecasts = async () => {
       try {
         const response = await fetch(`${API_BASE}/api/economic/latest`)
@@ -178,13 +167,11 @@ export default function Dashboard() {
     fetchPositions()
     fetchEaSettings()
     fetchTotalUsers()
-    fetchNfpForecast()
     fetchEconomicForecasts()
 
     const interval = setInterval(() => {
       fetchAccount()
       fetchPositions()
-      fetchNfpForecast()
       fetchEconomicForecasts()
     }, 5000)
 
@@ -207,8 +194,41 @@ export default function Dashboard() {
     { label: 'Invested capital', value: money(account.totalInvested), change: 'Stable', tone: 'amber' },
   ]
 
+  const formatDate = (value) => {
+    if (!value) return 'N/A'
+    const date = new Date(value)
+    return Number.isNaN(date.getTime())
+      ? String(value)
+      : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  }
+
+  const formatNfpValue = (value) => {
+    const number = Number(value)
+    return Number.isFinite(number) ? `${number.toFixed(1)}K` : 'N/A'
+  }
+
+  const formatPredictorValue = (value, suffix) => {
+    const number = Number(value)
+    return Number.isFinite(number) ? `${number.toFixed(1)}${suffix}` : 'N/A'
+  }
+
   const predictorCards = [
-    { key: 'nfp', name: 'NFP', title: 'Non-Farm Payrolls', description: 'Employment release', tone: 'sky', data: nfpForecast, valueSuffix: 'K' },
+    {
+      key: 'nfp',
+      name: 'NFP',
+      title: 'Non-Farm Payrolls',
+      description: 'Employment release',
+      tone: 'sky',
+      data: nfpForecast
+        ? {
+            ...nfpForecast,
+            prediction: nfpForecast.nfp_prediction,
+            consensus: nfpForecast.consensus_nfp,
+            direction: nfpForecast.surprise_direction,
+          }
+        : null,
+      valueSuffix: 'K',
+    },
     { key: 'cpi', name: 'CPI', title: 'Consumer Price Index', description: 'Inflation release', tone: 'amber', data: economicForecasts?.cpi, valueSuffix: '%' },
     { key: 'ppi', name: 'PPI', title: 'Producer Price Index', description: 'Producer inflation', tone: 'violet', data: economicForecasts?.ppi, valueSuffix: '%' },
     { key: 'fomc', name: 'FOMC', title: 'Federal Funds Rate', description: 'Rate decision', tone: 'emerald', data: economicForecasts?.fomc, valueSuffix: '%' },
@@ -832,27 +852,33 @@ const goTo = (labelName) => {
                         </div>
                         <div className="text-right">
                           <p className={label}>Release</p>
-                          <p className="mt-1 text-xs font-semibold tabular-nums">{forecast?.forecast_release_date || 'Pending'}</p>
+                          <p className="mt-1 text-xs font-semibold tabular-nums">{formatDate(forecast?.forecast_release_date)}</p>
                         </div>
                       </div>
 
-                      {forecast ? (
+                      {predictor.key === 'nfp' && nfpLoading ? (
+                        <div className={`mt-8 py-6 text-sm ${softText}`}>Loading USDNewsAI forecast...</div>
+                      ) : predictor.key === 'nfp' && nfpError ? (
+                        <div className="mt-8 rounded-2xl border border-amber-400/20 bg-amber-400/5 px-4 py-5 text-sm text-amber-200">
+                          {nfpError}
+                        </div>
+                      ) : forecast ? (
                         <>
                           <div className="mt-6 flex items-end justify-between gap-2">
                             <div>
                               <p className={label}>AI forecast</p>
-                              <p className="mt-1 text-3xl font-bold tabular-nums">{Number(forecast.prediction).toFixed(1)}{predictor.valueSuffix}</p>
+                              <p className="mt-1 text-3xl font-bold tabular-nums">{formatPredictorValue(forecast.prediction, predictor.valueSuffix)}</p>
                             </div>
                             <p className={`text-sm font-semibold ${signalTone}`}>{forecast.direction || 'Neutral'}</p>
                           </div>
                           <div className={`mt-5 grid grid-cols-2 gap-3 border-t pt-4 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
                             <div>
                               <p className={label}>Consensus</p>
-                              <p className="mt-1 text-sm font-semibold tabular-nums">{consensus != null ? `${Number(consensus).toFixed(1)}${predictor.valueSuffix}` : 'N/A'}</p>
+                              <p className="mt-1 text-sm font-semibold tabular-nums">{consensus != null ? formatPredictorValue(consensus, predictor.valueSuffix) : 'N/A'}</p>
                             </div>
                             <div>
                               <p className={label}>Surprise</p>
-                              <p className="mt-1 text-sm font-semibold tabular-nums">{surprise != null ? `${Number(surprise) > 0 ? '+' : ''}${Number(surprise).toFixed(1)}${predictor.valueSuffix}` : 'N/A'}</p>
+                              <p className="mt-1 text-sm font-semibold tabular-nums">{surprise != null ? `${Number(surprise) > 0 ? '+' : ''}${formatPredictorValue(surprise, predictor.valueSuffix)}` : 'N/A'}</p>
                             </div>
                           </div>
                           <p className={`mt-4 text-xs ${softText}`}>AI forecast vs. consensus</p>
@@ -867,10 +893,34 @@ const goTo = (labelName) => {
 
               {nfpForecast && (
                 <div className={`mt-4 flex flex-wrap gap-x-5 gap-y-2 px-1 text-xs ${softText}`}>
-                  <span>Model: {nfpForecast.model || 'Economic ensemble'}</span>
-                  <span>Cutoff: {nfpForecast.information_cutoff || 'N/A'}</span>
+                  <span>Model: {nfpForecast.model || 'N/A'}</span>
+                  <span>Release: {formatDate(nfpForecast.forecast_release_date)}</span>
+                  <span>Reference: {formatDate(nfpForecast.reference_month)}</span>
+                  <span>Cutoff: {formatDate(nfpForecast.information_cutoff)}</span>
                   <span>Training rows: {nfpForecast.training_rows ?? 'N/A'}</span>
-                  <span>Features: {nfpForecast.features ?? 'N/A'}</span>
+                  <span>Features: {nfpForecast.feature_count ?? 'N/A'}</span>
+                </div>
+              )}
+
+              {nfpForecast && (
+                <div className={`${surface} mt-4 grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4`}>
+                  {[
+                    ['NFP forecast', formatNfpValue(nfpForecast.nfp_prediction)],
+                    ['Ridge prediction', formatNfpValue(nfpForecast.ridge_prediction)],
+                    ['Random forest', formatNfpValue(nfpForecast.rf_prediction)],
+                    ['Gradient boosting', formatNfpValue(nfpForecast.gb_prediction)],
+                    ['Forecast release date', formatDate(nfpForecast.forecast_release_date)],
+                    ['Reference month', formatDate(nfpForecast.reference_month)],
+                    ['Information cutoff', formatDate(nfpForecast.information_cutoff)],
+                    ['Model', nfpForecast.model || 'N/A'],
+                    ['Training rows', nfpForecast.training_rows ?? 'N/A'],
+                    ['Feature count', nfpForecast.feature_count ?? 'N/A'],
+                  ].map(([title, value]) => (
+                    <div key={title}>
+                      <p className={label}>{title}</p>
+                      <p className="mt-2 text-sm font-semibold tabular-nums">{value}</p>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
