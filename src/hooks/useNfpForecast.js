@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
-// USDNewsAI base URL: set VITE_USDNEWSAI_API_URL in your .env to move between
-// local and production without touching source code. Falls back to local dev.
-const USDNEWSAI_API_URL = import.meta.env.VITE_USDNEWSAI_API_URL || 'http://127.0.0.1:8000'
+// Vite injects VITE_* variables at build time. Keep production pointed at the
+// public service even when the deployment variable was omitted.
+const USDNEWSAI_API_URL = (import.meta.env.VITE_USDNEWSAI_API_URL || 'https://usdnewsai.onrender.com').replace(/\/$/, '')
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000 // ~5 minutes
 
@@ -16,16 +16,21 @@ export function useNfpForecast() {
     cancelledRef.current = false
 
     const fetchForecast = async () => {
+      const requestUrl = `${USDNEWSAI_API_URL}/api/nfp/latest`
+
       try {
-        const response = await fetch(`${USDNEWSAI_API_URL}/api/nfp/latest`)
+        console.info('[NFP] Requesting forecast:', requestUrl)
+        const response = await fetch(requestUrl)
+        console.info('[NFP] Response status:', response.status)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const data = await response.json()
+        console.info('[NFP] Response JSON:', data)
         if (cancelledRef.current) return
         setForecast(data)
         setError(null)
       } catch (err) {
         if (cancelledRef.current) return
-        console.error('Failed to fetch NFP forecast:', err)
+        console.error('[NFP] Failed to fetch forecast:', err)
         setForecast(null)
         setError('unavailable')
       } finally {
