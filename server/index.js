@@ -275,6 +275,34 @@ app.get('/api/nfp', (req, res) => {
   })
 })
 
+const ECONOMIC_DATA = {
+  cpi: {
+    prediction: 2.8,
+    consensus: 2.7,
+    expected_surprise: 0.1,
+    direction: 'Bearish',
+    forecast_release_date: '2026-09-11',
+  },
+  ppi: {
+    prediction: 3.1,
+    consensus: 3.0,
+    expected_surprise: 0.1,
+    direction: 'Bearish',
+    forecast_release_date: '2026-09-10',
+  },
+  fomc: {
+    prediction: 4.25,
+    consensus: 4.25,
+    expected_surprise: 0,
+    direction: 'Neutral',
+    forecast_release_date: '2026-09-16',
+  },
+}
+
+app.get('/api/economic/latest', (req, res) => {
+  res.json({ success: true, forecasts: ECONOMIC_DATA })
+})
+
 // ---------------- REGISTER ----------------
 
 app.post(

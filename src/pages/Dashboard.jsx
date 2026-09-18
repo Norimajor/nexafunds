@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, LayoutDashboard, Settings2 } from 'lucide-react'
 
 const navItems = [
-  { label: 'Overview', active: true },
-  { label: 'Portfolio' },
-  { label: 'Transactions' },
-  { label: 'Strategy AI' },
+  { label: 'Overview', active: true, icon: LayoutDashboard },
+  { label: 'Portfolio', icon: ChartNoAxesCombined },
+  { label: 'Transactions', icon: ArrowLeftRight },
+  { label: 'Strategy AI', icon: BrainCircuit },
 ]
 
 const chartPath =
@@ -52,8 +53,8 @@ export default function Dashboard() {
   const [user, setUser] = useState({ first_name: 'Investor' })
   const [positions, setPositions] = useState([])
   const [nfpForecast, setNfpForecast] = useState(null)
+  const [economicForecasts, setEconomicForecasts] = useState(null)
 
-  // ✅ NEW LIVE EA STATS
   const [eaStats, setEaStats] = useState({
     activeStrategy: 'Unknown',
     riskProfile: 'Unknown',
@@ -101,7 +102,6 @@ export default function Dashboard() {
           totalReturn: balance > 0 ? ((equity - balance) / balance) * 100 : 0,
         })
 
-        // ✅ UPDATE LIVE EA STATS
         setEaStats({
           activeStrategy: mt5.server || 'MT5 Live Engine',
           riskProfile:
@@ -161,16 +161,31 @@ export default function Dashboard() {
       }
     }
 
+    const fetchEconomicForecasts = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/economic/latest`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = await response.json()
+        setEconomicForecasts(data.forecasts || null)
+      } catch (error) {
+        console.error('Failed to fetch economic forecasts:', error)
+        setEconomicForecasts(null)
+      }
+    }
+
     fetchUser()
     fetchAccount()
     fetchPositions()
     fetchEaSettings()
     fetchTotalUsers()
+    fetchNfpForecast()
+    fetchEconomicForecasts()
 
     const interval = setInterval(() => {
       fetchAccount()
       fetchPositions()
       fetchNfpForecast()
+      fetchEconomicForecasts()
     }, 5000)
 
     return () => {
@@ -190,6 +205,13 @@ export default function Dashboard() {
     { label: 'Net profit', value: money(account.totalProfit), change: '+12.6%', tone: 'blue' },
     { label: 'Portfolio value', value: money(account.portfolioValue), change: 'Live', tone: 'violet' },
     { label: 'Invested capital', value: money(account.totalInvested), change: 'Stable', tone: 'amber' },
+  ]
+
+  const predictorCards = [
+    { key: 'nfp', name: 'NFP', title: 'Non-Farm Payrolls', description: 'Employment release', tone: 'sky', data: nfpForecast, valueSuffix: 'K' },
+    { key: 'cpi', name: 'CPI', title: 'Consumer Price Index', description: 'Inflation release', tone: 'amber', data: economicForecasts?.cpi, valueSuffix: '%' },
+    { key: 'ppi', name: 'PPI', title: 'Producer Price Index', description: 'Producer inflation', tone: 'violet', data: economicForecasts?.ppi, valueSuffix: '%' },
+    { key: 'fomc', name: 'FOMC', title: 'Federal Funds Rate', description: 'Rate decision', tone: 'emerald', data: economicForecasts?.fomc, valueSuffix: '%' },
   ]
 
   const activity = [
@@ -242,8 +264,8 @@ export default function Dashboard() {
 
   /* ---------- shared style helpers (professional, consistent) ---------- */
   const surface = isDark
-    ? 'rounded-3xl border border-white/10 bg-white/[0.04] shadow-[0_24px_60px_-25px_rgba(2,6,23,0.9)] backdrop-blur-xl ring-1 ring-inset ring-white/5'
-    : 'rounded-3xl border border-slate-900/5 bg-white/80 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.35)] backdrop-blur-xl ring-1 ring-inset ring-white'
+    ? 'rounded-3xl border border-sky-200/15 bg-[#071735]/65 shadow-[0_24px_70px_-28px_rgba(0,0,0,0.95)] backdrop-blur-2xl ring-1 ring-inset ring-white/10'
+    : 'rounded-3xl border border-slate-900/10 bg-white/80 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.35)] backdrop-blur-xl ring-1 ring-inset ring-white'
 
   const softText = isDark ? 'text-slate-400' : 'text-slate-500'
   const label = `text-[11px] font-semibold uppercase tracking-[0.2em] ${softText}`
@@ -401,38 +423,39 @@ const goTo = (labelName) => {
     <div
       className={
         isDark
-          ? 'relative min-h-screen overflow-hidden bg-[#070b16] text-slate-100'
-          : 'relative min-h-screen overflow-hidden bg-[#eef2f8] text-slate-900'
+          ? 'relative min-h-screen overflow-x-hidden bg-[#020817] text-slate-100'
+          : 'relative min-h-screen overflow-x-hidden bg-[#eef2f8] text-slate-900'
       }
     >
-      {/* layered ambient background */}
+      {/* Layered market background */}
       <div
         className={
           isDark
-            ? 'pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.20),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(99,102,241,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.14),transparent_60%)]'
+            ? 'pointer-events-none fixed inset-0 bg-[#020817]/45 bg-[url(/assets/nexafunds-dashboard-bg.svg)] bg-cover bg-center bg-fixed'
             : 'pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.22),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(129,140,248,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.16),transparent_60%)]'
         }
       />
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(to_right,rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]"
+        className="pointer-events-none fixed inset-0 bg-[linear-gradient(115deg,rgba(2,8,23,0.96)_0%,rgba(2,8,23,0.58)_42%,rgba(4,10,28,0.80)_100%),radial-gradient(circle_at_70%_15%,rgba(16,170,255,0.18),transparent_38%)]"
       />
+      <div className="pointer-events-none fixed inset-0 opacity-[0.22] [background-image:linear-gradient(to_right,rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
 
-      <div className="relative mx-auto flex max-w-[1600px]">
+      <div className="relative mx-auto flex min-h-screen max-w-[1680px]">
         {/* ---------------- Sidebar ---------------- */}
         <aside
           className={
             isDark
-              ? 'hidden min-h-screen w-72 shrink-0 border-r border-white/10 bg-white/[0.03] p-6 backdrop-blur-2xl lg:flex lg:flex-col'
+              ? 'hidden min-h-screen w-72 shrink-0 border-r border-sky-200/10 bg-[#030d25]/80 p-6 shadow-[12px_0_60px_-35px_rgba(16,185,255,0.7)] backdrop-blur-2xl lg:flex lg:flex-col'
               : 'hidden min-h-screen w-72 shrink-0 border-r border-slate-900/5 bg-white/70 p-6 backdrop-blur-2xl lg:flex lg:flex-col'
           }
         >
           <div className="mb-10 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white shadow-[0_12px_30px_-10px_rgba(14,165,233,0.9)]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white shadow-[0_12px_30px_-8px_rgba(14,165,233,1)]">
               N
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight">NexaFunds</h1>
-              <p className={`text-xs ${softText}`}>Investor Portal</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300/70">Investor Portal</p>
             </div>
           </div>
 
@@ -446,7 +469,7 @@ const goTo = (labelName) => {
                   onClick={() => goTo(item.label)}
                   className={navButton(item, isActive)}
                 >
-                  <span>{item.label}</span>
+                  <span className="flex items-center gap-3"><item.icon size={18} strokeWidth={1.8} />{item.label}</span>
                   {isActive && <span className="h-2.5 w-2.5 rounded-full bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.8)]" />}
                 </button>
               )
@@ -479,7 +502,7 @@ const goTo = (labelName) => {
               onClick={(e) => e.stopPropagation()}
               className={
                 isDark
-                  ? 'h-full w-72 border-r border-white/10 bg-slate-950/95 p-6'
+                  ? 'h-full w-72 border-r border-white/10 bg-[#030d25]/95 p-6'
                   : 'h-full w-72 border-r border-slate-200 bg-white/95 p-6'
               }
             >
@@ -512,7 +535,7 @@ const goTo = (labelName) => {
                       }}
                       className={navButton(item, isActive)}
                     >
-                      <span>{item.label}</span>
+                      <span className="flex items-center gap-3"><item.icon size={18} strokeWidth={1.8} />{item.label}</span>
                       {isActive && <span className="h-2.5 w-2.5 rounded-full bg-white/90" />}
                     </button>
                   )
@@ -526,8 +549,7 @@ const goTo = (labelName) => {
                   }}
                   className={navButton({ label: 'Settings' }, false)}
                 >
-                  <span>Settings</span>
-                  <span className={`text-xs ${softText}`}>⚙</span>
+                  <span className="flex items-center gap-3"><Settings2 size={18} strokeWidth={1.8} />Settings</span>
                 </button>
               </nav>
             </div>
@@ -539,7 +561,7 @@ const goTo = (labelName) => {
           <header
             className={
               isDark
-                ? 'sticky top-0 z-30 border-b border-white/10 bg-slate-950/70 px-4 py-5 backdrop-blur-2xl sm:px-6'
+                ? 'sticky top-0 z-30 border-b border-sky-200/10 bg-[#030d25]/72 px-4 py-5 shadow-[0_15px_45px_-35px_rgba(56,189,248,0.9)] backdrop-blur-2xl sm:px-6'
                 : 'sticky top-0 z-30 border-b border-slate-900/5 bg-white/70 px-4 py-5 backdrop-blur-2xl sm:px-6'
             }
           >
@@ -749,96 +771,79 @@ const goTo = (labelName) => {
               </div>
             </section>
 
-            {/* NFP forecast */}
+            {/* Economic predictors */}
             <section>
-              <div className="mb-4">
-                <h2 className="text-xl font-semibold tracking-tight">USD Economic Forecast</h2>
-                <p className={`mt-1 text-sm ${softText}`}>AI-powered forecast based on the latest available economic data.</p>
-              </div>
-
-              <div className={`${surface} p-6`}>
-                <div className="mb-6 flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-semibold">Non-Farm Payrolls (NFP)</h3>
-                    <p className={`mt-1 text-sm ${softText}`}>Next U.S. employment release</p>
-                  </div>
-
-                  {nfpForecast?.forecast_release_date && (
-                    <div className="text-right">
-                      <p className={label}>Release</p>
-                      <p className="mt-1 text-sm font-semibold tabular-nums">{nfpForecast.forecast_release_date}</p>
-                    </div>
-                  )}
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className={label}>Market intelligence</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">USD Economic Predictors</h2>
+                  <p className={`mt-1 text-sm ${softText}`}>AI signals for the releases most likely to move your portfolio.</p>
                 </div>
-
-                {nfpForecast ? (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {[
-                      {
-                        title: 'AI Forecast',
-                        main: `${Number(nfpForecast.prediction).toFixed(1)}K`,
-                        sub: 'Ensemble prediction',
-                      },
-                      {
-                        title: 'Market Consensus',
-                        main:
-                          nfpForecast.consensus_nfp != null ? `${Number(nfpForecast.consensus_nfp).toFixed(1)}K` : 'N/A',
-                        sub: nfpForecast.consensus_source || 'No consensus available',
-                      },
-                      {
-                        title: 'Expected Surprise',
-                        main:
-                          nfpForecast.expected_surprise != null
-                            ? `${Number(nfpForecast.expected_surprise).toFixed(1)}K`
-                            : 'N/A',
-                        sub: 'AI forecast − consensus',
-                      },
-                      {
-                        title: 'USD Direction',
-                        main: nfpForecast.direction || 'N/A',
-                        sub: `Magnitude: ${nfpForecast.magnitude || 'N/A'}`,
-                      },
-                    ].map((cell) => (
-                      <div
-                        key={cell.title}
-                        className={[
-                          'rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5',
-                          isDark
-                            ? 'border-white/10 bg-white/[0.04] hover:border-sky-400/40'
-                            : 'border-slate-200 bg-slate-50 hover:border-sky-300',
-                        ].join(' ')}
-                      >
-                        <p className={label}>{cell.title}</p>
-                        <p className="mt-2 text-3xl font-bold tabular-nums">{cell.main}</p>
-                        <p className={`mt-2 text-xs ${softText}`}>{cell.sub}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className={`py-6 text-sm ${softText}`}>Loading NFP forecast...</div>
-                )}
-
-                {nfpForecast && (
-                  <div
-                    className={`mt-6 flex flex-wrap gap-x-6 gap-y-2 border-t pt-4 text-xs ${
-                      isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-500'
-                    }`}
-                  >
-                    <span>
-                      Reference month:{' '}
-                      {nfpForecast.reference_month
-                        ? new Date(nfpForecast.reference_month).toLocaleDateString('en-US', {
-                            month: 'long',
-                            year: 'numeric',
-                          })
-                        : 'N/A'}
-                    </span>
-                    <span>Information cutoff: {nfpForecast.information_cutoff || 'N/A'}</span>
-                    <span>Training rows: {nfpForecast.training_rows ?? 'N/A'}</span>
-                    <span>Features: {nfpForecast.features ?? 'N/A'}</span>
-                  </div>
-                )}
+                <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${tonePill.sky}`}>Live model feed</span>
               </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {predictorCards.map((predictor) => {
+                  const forecast = predictor.data
+                  const consensus = forecast?.consensus ?? forecast?.consensus_nfp
+                  const surprise = forecast?.expected_surprise
+                  const signalTone = forecast?.direction === 'Bearish' ? 'text-rose-400' : 'text-emerald-500'
+
+                  return (
+                    <article
+                      key={predictor.key}
+                      className={`${surface} group relative overflow-hidden p-5 transition-all duration-300 hover:-translate-y-1 hover:border-sky-400/40`}
+                    >
+                      <div className={`absolute inset-x-0 top-0 h-1 ${predictor.tone === 'sky' ? 'bg-sky-500' : predictor.tone === 'amber' ? 'bg-amber-500' : predictor.tone === 'violet' ? 'bg-violet-500' : 'bg-emerald-500'}`} />
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <span className={`rounded-lg px-2 py-1 text-xs font-bold ${tonePill[predictor.tone]}`}>{predictor.name}</span>
+                          <h3 className="mt-4 text-base font-semibold">{predictor.title}</h3>
+                          <p className={`mt-1 text-xs ${softText}`}>{predictor.description}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={label}>Release</p>
+                          <p className="mt-1 text-xs font-semibold tabular-nums">{forecast?.forecast_release_date || 'Pending'}</p>
+                        </div>
+                      </div>
+
+                      {forecast ? (
+                        <>
+                          <div className="mt-6 flex items-end justify-between gap-2">
+                            <div>
+                              <p className={label}>AI forecast</p>
+                              <p className="mt-1 text-3xl font-bold tabular-nums">{Number(forecast.prediction).toFixed(1)}{predictor.valueSuffix}</p>
+                            </div>
+                            <p className={`text-sm font-semibold ${signalTone}`}>{forecast.direction || 'Neutral'}</p>
+                          </div>
+                          <div className={`mt-5 grid grid-cols-2 gap-3 border-t pt-4 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                            <div>
+                              <p className={label}>Consensus</p>
+                              <p className="mt-1 text-sm font-semibold tabular-nums">{consensus != null ? `${Number(consensus).toFixed(1)}${predictor.valueSuffix}` : 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className={label}>Surprise</p>
+                              <p className="mt-1 text-sm font-semibold tabular-nums">{surprise != null ? `${Number(surprise) > 0 ? '+' : ''}${Number(surprise).toFixed(1)}${predictor.valueSuffix}` : 'N/A'}</p>
+                            </div>
+                          </div>
+                          <p className={`mt-4 text-xs ${softText}`}>AI forecast vs. consensus</p>
+                        </>
+                      ) : (
+                        <div className={`mt-8 py-6 text-sm ${softText}`}>Loading forecast...</div>
+                      )}
+                    </article>
+                  )
+                })}
+              </div>
+
+              {nfpForecast && (
+                <div className={`mt-4 flex flex-wrap gap-x-5 gap-y-2 px-1 text-xs ${softText}`}>
+                  <span>Model: {nfpForecast.model || 'Economic ensemble'}</span>
+                  <span>Cutoff: {nfpForecast.information_cutoff || 'N/A'}</span>
+                  <span>Training rows: {nfpForecast.training_rows ?? 'N/A'}</span>
+                  <span>Features: {nfpForecast.features ?? 'N/A'}</span>
+                </div>
+              )}
             </section>
 
             {/* Access cards */}

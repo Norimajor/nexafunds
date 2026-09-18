@@ -2,3 +2,6 @@ node_modules
 dist
 server/database.db
 .env
+
+database.db
+nexafunds_mt5.db
