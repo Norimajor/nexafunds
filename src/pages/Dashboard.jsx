@@ -264,7 +264,7 @@ export default function Dashboard() {
 
   /* ---------- shared style helpers (professional, consistent) ---------- */
   const surface = isDark
-    ? 'rounded-3xl border border-sky-200/15 bg-[#071735]/65 shadow-[0_24px_70px_-28px_rgba(0,0,0,0.95)] backdrop-blur-2xl ring-1 ring-inset ring-white/10'
+    ? 'rounded-3xl border border-white/[0.08] bg-white/[0.045] shadow-[0_24px_70px_-28px_rgba(0,0,0,0.95)] backdrop-blur-xl ring-1 ring-inset ring-white/[0.04]'
     : 'rounded-3xl border border-slate-900/10 bg-white/80 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.35)] backdrop-blur-xl ring-1 ring-inset ring-white'
 
   const softText = isDark ? 'text-slate-400' : 'text-slate-500'
@@ -288,12 +288,12 @@ export default function Dashboard() {
 
   const navButton = (item, isActive) =>
     [
-      'group relative flex w-full items-center justify-between overflow-hidden rounded-2xl px-4 py-3 text-left text-sm font-medium',
+      'group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border border-transparent px-4 py-3 text-left text-sm font-medium',
       pressable,
       isActive
-        ? 'bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white shadow-[0_14px_30px_-12px_rgba(14,165,233,0.9)]'
+        ? 'border-white/[0.08] bg-white/[0.06] text-white backdrop-blur-xl before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:bg-cyan-400 before:shadow-[0_0_12px_rgba(34,211,238,0.7)]'
         : isDark
-          ? 'text-slate-300 hover:bg-white/[0.06] hover:text-white active:bg-sky-500/20 active:text-sky-200'
+          ? 'text-white/60 hover:border-white/[0.06] hover:bg-white/[0.04] hover:text-white active:bg-sky-500/10 active:text-sky-200'
           : 'text-slate-600 hover:bg-slate-900/[0.04] hover:text-slate-900 active:bg-sky-500/15 active:text-sky-700',
     ].join(' ')
 const goTo = (labelName) => {
@@ -445,7 +445,7 @@ const goTo = (labelName) => {
         <aside
           className={
             isDark
-              ? 'hidden min-h-screen w-72 shrink-0 border-r border-sky-200/10 bg-[#030d25]/55 p-6 shadow-[12px_0_60px_-35px_rgba(16,185,255,0.7)] backdrop-blur-2xl lg:flex lg:flex-col'
+              ? 'hidden min-h-screen w-72 shrink-0 border-r border-white/[0.08] bg-[#0a0e1a]/90 p-6 shadow-[12px_0_60px_-35px_rgba(16,185,255,0.22)] backdrop-blur-2xl lg:flex lg:flex-col'
               : 'hidden min-h-screen w-72 shrink-0 border-r border-slate-900/5 bg-white/70 p-6 backdrop-blur-2xl lg:flex lg:flex-col'
           }
         >
@@ -459,7 +459,7 @@ const goTo = (labelName) => {
             </div>
           </div>
 
-          <nav className="space-y-2">
+          <nav className="space-y-1.5">
             {navItems.map((item) => {
               const isActive = activeNav === item.label
               return (
@@ -469,26 +469,38 @@ const goTo = (labelName) => {
                   onClick={() => goTo(item.label)}
                   className={navButton(item, isActive)}
                 >
-                  <span className="flex items-center gap-3"><item.icon size={18} strokeWidth={1.8} />{item.label}</span>
-                  {isActive && <span className="h-2.5 w-2.5 rounded-full bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.8)]" />}
+                  <item.icon size={20} strokeWidth={1.8} />
+                  <span>{item.label}</span>
                 </button>
               )
             })}
-
-            <button
-              type="button"
-              onClick={() => setShowSettingsPanel(true)}
-              className={navButton({ label: 'Settings' }, false)}
-            >
-              <span>Settings</span>
-              <span className={`text-xs ${softText}`}>⚙</span>
-            </button>
           </nav>
 
-          <div className={`mt-auto p-4 ${surface}`}>
-            <p className={label}>Account</p>
-            <h3 className="mt-3 text-lg font-semibold">Premium Investor</h3>
-            <p className={`mt-1 text-sm ${softText}`}>Tier 3 performance plan</p>
+          <div className="mt-auto space-y-4">
+            <div className={`p-4 ${surface}`}>
+              <p className={label}>Account</p>
+              <h3 className="mt-3 text-lg font-semibold">Premium Investor</h3>
+              <p className={`mt-1 text-sm ${softText}`}>Tier 3 performance plan</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => setShowSettingsPanel(true)}
+                className={navButton({ label: 'Settings' }, false)}
+              >
+                <Settings2 size={20} strokeWidth={1.8} />
+                <span>Settings</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className={`${navButton({ label: 'Logout' }, false)} hover:border-rose-400/20 hover:bg-rose-500/10 hover:text-rose-200`}
+              >
+                <LogOut size={20} strokeWidth={1.8} />
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -522,7 +534,7 @@ const goTo = (labelName) => {
                 </button>
               </div>
 
-              <nav className="space-y-2">
+              <nav className="space-y-1.5">
                 {navItems.map((item) => {
                   const isActive = activeNav === item.label
                   return (
@@ -535,8 +547,8 @@ const goTo = (labelName) => {
                       }}
                       className={navButton(item, isActive)}
                     >
-                      <span className="flex items-center gap-3"><item.icon size={18} strokeWidth={1.8} />{item.label}</span>
-                      {isActive && <span className="h-2.5 w-2.5 rounded-full bg-white/90" />}
+                      <item.icon size={20} strokeWidth={1.8} />
+                      <span>{item.label}</span>
                     </button>
                   )
                 })}
@@ -549,7 +561,19 @@ const goTo = (labelName) => {
                   }}
                   className={navButton({ label: 'Settings' }, false)}
                 >
-                  <span className="flex items-center gap-3"><Settings2 size={18} strokeWidth={1.8} />Settings</span>
+                  <Settings2 size={20} strokeWidth={1.8} />
+                  <span>Settings</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSidebarOpen(false)
+                    navigate('/login')
+                  }}
+                  className={`${navButton({ label: 'Logout' }, false)} hover:border-rose-400/20 hover:bg-rose-500/10 hover:text-rose-200`}
+                >
+                  <LogOut size={20} strokeWidth={1.8} />
+                  <span>Logout</span>
                 </button>
               </nav>
             </div>
@@ -561,7 +585,7 @@ const goTo = (labelName) => {
           <header
             className={
               isDark
-                ? 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-sky-200/10 bg-[#030d25]/72 px-4 py-4 shadow-[0_15px_45px_-35px_rgba(56,189,248,0.9)] backdrop-blur-2xl sm:px-6 sm:py-5'
+                ? 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-white/[0.08] bg-[#0a0e1a]/75 px-4 py-4 shadow-[0_15px_45px_-35px_rgba(56,189,248,0.45)] backdrop-blur-2xl sm:px-6 sm:py-5'
                 : 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-slate-900/5 bg-white/70 px-4 py-4 backdrop-blur-2xl sm:px-6 sm:py-5'
             }
           >
