@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, LayoutDashboard, Settings2 } from 'lucide-react'
+import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, LayoutDashboard, LogOut, Menu, Settings2, Sun, Moon } from 'lucide-react'
 
 const navItems = [
   { label: 'Overview', active: true, icon: LayoutDashboard },
@@ -561,11 +561,13 @@ const goTo = (labelName) => {
           <header
             className={
               isDark
-                ? 'sticky top-0 z-30 border-b border-sky-200/10 bg-[#030d25]/72 px-4 py-5 shadow-[0_15px_45px_-35px_rgba(56,189,248,0.9)] backdrop-blur-2xl sm:px-6'
-                : 'sticky top-0 z-30 border-b border-slate-900/5 bg-white/70 px-4 py-5 backdrop-blur-2xl sm:px-6'
+                ? 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-sky-200/10 bg-[#030d25]/72 px-4 py-4 shadow-[0_15px_45px_-35px_rgba(56,189,248,0.9)] backdrop-blur-2xl sm:px-6 sm:py-5'
+                : 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-slate-900/5 bg-white/70 px-4 py-4 backdrop-blur-2xl sm:px-6 sm:py-5'
             }
           >
-            <div className="flex items-center justify-between gap-4">
+            <div className="pointer-events-none absolute inset-0 bg-[url(/assets/stock-trading-bg.jpg)] bg-cover bg-center opacity-[0.07]" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-blue-500/0 via-cyan-400/60 to-violet-500/0" />
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -578,20 +580,21 @@ const goTo = (labelName) => {
                       : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:text-sky-600',
                   ].join(' ')}
                 >
-                  ☰
+                  <Menu size={19} strokeWidth={1.8} />
                 </button>
 
-                <div>
-                  <p className={`text-sm ${softText}`}>Welcome back</p>
-                  <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Dashboard overview</h2>
+                <div className="relative">
+                  <div className="pointer-events-none absolute -inset-x-3 -inset-y-2 -z-10 bg-sky-400/10 blur-2xl" />
+                  <p className={`text-xs font-medium tracking-wide sm:text-sm ${softText}`}>Welcome back</p>
+                  <h2 className="text-2xl font-bold tracking-tight text-white sm:text-[28px]">Dashboard overview</h2>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 sm:gap-3">
-                <span className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium sm:inline-flex ${tonePill.emerald}`}>
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
+                <span className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-300 shadow-[0_8px_24px_-16px_rgba(52,211,153,0.9)]">
                   <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.9)]" />
                   </span>
                   Live sync
                 </span>
@@ -607,32 +610,34 @@ const goTo = (labelName) => {
                       : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:text-sky-600 active:bg-sky-100',
                   ].join(' ')}
                 >
-                  ⚙ <span className="hidden sm:inline">Settings</span>
+                  <Settings2 size={16} strokeWidth={1.8} /> <span>Settings</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setTheme(isDark ? 'light' : 'dark')}
                   className={[
-                    'h-10 rounded-full border px-3 text-sm font-medium',
+                    'inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium',
                     pressable,
                     isDark
                       ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-amber-300/50 hover:text-amber-200 active:bg-amber-400/20'
                       : 'border-slate-200 bg-white text-slate-800 hover:border-indigo-300 hover:text-indigo-600 active:bg-indigo-100',
                   ].join(' ')}
                 >
-                  {isDark ? '☀️ Light' : '🌙 Dark'}
+                  {isDark ? <Sun size={16} strokeWidth={1.8} /> : <Moon size={16} strokeWidth={1.8} />}
+                  <span>{isDark ? 'Light' : 'Dark'}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => navigate('/login')}
                   className={[
-                    'h-10 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 px-4 text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(244,63,94,0.9)]',
+                    'inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-r from-rose-500/90 to-fuchsia-500/90 px-4 text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(244,63,94,0.9)]',
                     pressable,
                     'hover:from-rose-600 hover:to-pink-600 active:from-rose-700 active:to-pink-700',
                   ].join(' ')}
                 >
+                  <LogOut size={16} strokeWidth={1.8} />
                   Logout
                 </button>
               </div>
