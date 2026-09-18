@@ -431,7 +431,7 @@ const goTo = (labelName) => {
       <div
         className={
           isDark
-            ? 'pointer-events-none fixed inset-0 bg-[url(/assets/nexafunds-dashboard-bg.svg)] bg-cover bg-center bg-fixed'
+            ? 'pointer-events-none fixed inset-0 bg-[url(/assets/stock-trading-bg.jpg)] bg-cover bg-center bg-fixed'
             : 'pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.22),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(129,140,248,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.16),transparent_60%)]'
         }
       />
