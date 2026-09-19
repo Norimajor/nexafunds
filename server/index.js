@@ -5,12 +5,17 @@ import bcrypt from 'bcrypt'
 import dotenv from 'dotenv'
 import session from 'express-session'
 import fs from 'fs' 
+import path from 'path'
+import { fileURLToPath } from 'url'
 import strategyRouter from './routes/strategy.js'
 
 dotenv.config()
 
 const app = express()
 const isProd = process.env.NODE_ENV === 'production'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const DIST_DIR = path.resolve(__dirname, '../dist')
 
 // ============================================================
 // DATABASES
@@ -205,11 +210,6 @@ const initDatabases = async () => {
 // ============================================================
 // ROUTES
 // ============================================================
-
-app.get('/', (req, res) => {
-  res.send('NexaFunds backend is running')
-})
-
 
 // ============================================================
 // NFP FORECAST
@@ -787,6 +787,14 @@ app.post(
 // FALLBACKS
 // ============================================================
 app.use('/api/strategy', strategyRouter)
+app.use(express.static(DIST_DIR))
+app.get('/{*splat}', (req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return next()
+  }
+
+  res.sendFile(path.join(DIST_DIR, 'index.html'))
+})
 app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Not found' })
 })
@@ -805,7 +813,7 @@ const PORT = process.env.PORT || 4000
 
 initDatabases()
   .then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`NexaFunds backend running on port ${PORT}`)
     })
   })
