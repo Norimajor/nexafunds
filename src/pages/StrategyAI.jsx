@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_BASE = 'https://nexafunds.onrender.com'
-const AI_URL = (import.meta.env.VITE_NEXA_AI_API_URL || '').replace(/\/+$/, '')
+const API_BASE = import.meta.env.PROD ? '' : 'https://nexafunds.onrender.com'
 const stages = ['Interpreting strategy', 'Validating conditions', 'Loading historical data', 'Running backtest', 'Calculating performance', 'Preparing analysis']
 const examples = [
   'Buy XAUUSD when RSI drops below 30 on the 15m chart, exit at 1.5% profit or 0.7% loss.',
@@ -83,7 +82,7 @@ export default function StrategyAI() {
     setLoading(true); setError(''); setAnalysis(null)
     const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 30000)
     try {
-      const response = await fetch(`${AI_URL}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: value }), signal: controller.signal })
+      const response = await fetch(`${API_BASE}/api/strategy/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: value }), credentials: 'include', signal: controller.signal })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error || data?.detail || `NEXA AI returned HTTP ${response.status}.`)
       if (!data || typeof data !== 'object' || data.success !== true) throw new Error('The NEXA AI service returned a malformed analysis.')
