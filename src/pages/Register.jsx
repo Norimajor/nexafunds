@@ -122,7 +122,7 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       className="min-h-screen bg-cover bg-center flex items-center justify-center px-4 py-10 relative isolate"
       style={{
         backgroundImage:
-          "linear-gradient(125deg, rgba(30, 41, 59, .88), rgba(6, 78, 59, .72), rgba(154, 52, 18, .72)), url('https://unsplash.com/photos/business-people-collaboration-team-teamwork-professional-concept-HVrMcRg2510')",
+          "linear-gradient(125deg, rgba(30, 41, 59, .78), rgba(6, 78, 59, .58), rgba(154, 52, 18, .62)), url('https://plus.unsplash.com/premium_photo-1770383162772-1a483d01ab05?q=80&w=1600&auto=format&fit=crop')",
       }}
     >
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(251,191,36,.3),transparent_34%),linear-gradient(125deg,#1e293b,#065f46_52%,#9a3412)]" />

@@ -44,7 +44,7 @@ export default function Login() {
       className="min-h-screen bg-cover bg-center flex items-center justify-center px-4 py-10 relative isolate"
       style={{
         backgroundImage:
-          "linear-gradient(135deg, rgba(8, 47, 73, .88), rgba(30, 27, 75, .72), rgba(88, 28, 135, .76)), url('https://unsplash.com/photos/glowing-bar-chart-on-smartphone-PBEKd9stNUA')",
+          "linear-gradient(135deg, rgba(8, 47, 73, .78), rgba(30, 27, 75, .58), rgba(88, 28, 135, .62)), url('https://plus.unsplash.com/premium_photo-1682310075673-b408eb1ca6fd?q=80&w=1600&auto=format&fit=crop')",
       }}
     >
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_75%_20%,rgba(45,212,191,.35),transparent_35%),linear-gradient(135deg,#082f49,#312e81_55%,#701a75)]" />

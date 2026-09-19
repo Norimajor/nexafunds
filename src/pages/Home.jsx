@@ -8,7 +8,7 @@ export default function Home() {
       className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-fuchsia-950 bg-cover bg-center bg-fixed text-white flex flex-col relative isolate"
       style={{
         backgroundImage:
-          "linear-gradient(120deg, rgba(2, 6, 23, .92), rgba(30, 27, 75, .72), rgba(49, 46, 129, .58)), url('https://unsplash.com/photos/colorful-audio-waveform-abstract-technology-background-represent-digital-equalizer-technology-3Kpu5lCBHP0')",
+          "linear-gradient(120deg, rgba(2, 6, 23, .82), rgba(30, 27, 75, .58), rgba(49, 46, 129, .42)), url('https://plus.unsplash.com/premium_photo-1661963515041-661b417c0b45?q=80&w=1600&auto=format&fit=crop')",
       }}
     >
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.28),transparent_38%),linear-gradient(135deg,#020617,#172554_55%,#581c87)]" />
