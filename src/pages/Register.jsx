@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Select from 'react-select'
 import countryList from 'react-select-country-list'
 import ReactCountryFlag from 'react-country-flag'
+import { NEXAFUNDS_IMAGES } from '../config/images'
 
 const API_URL = 'https://nexafunds.onrender.com'
 
@@ -118,27 +119,11 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
   }
 
   return (
-    <div
-      className="min-h-screen bg-cover bg-center flex items-center justify-center px-4 py-10 relative isolate"
-      style={{
-        backgroundImage:
-          "linear-gradient(125deg, rgba(30, 41, 59, .78), rgba(6, 78, 59, .58), rgba(154, 52, 18, .62)), url('https://plus.unsplash.com/premium_photo-1770383162772-1a483d01ab05?q=80&w=1600&auto=format&fit=crop')",
-      }}
-    >
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(251,191,36,.3),transparent_34%),linear-gradient(125deg,#1e293b,#065f46_52%,#9a3412)]" />
-      <div className="w-full max-w-2xl bg-white/95 rounded-2xl shadow-2xl shadow-emerald-950/40 p-8 backdrop-blur-md border border-white/70">
-        <div className="text-center mb-8">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-xl bg-blue-600 text-white text-xl font-bold flex items-center justify-center">
-            N
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Create Investor Account
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Enter your details to create your NexaFunds account.
-          </p>
-        </div>
-
+    <div className="nf-auth-page nf-register-page">
+      <main className="nf-auth-form-side"><div className="nf-auth-form">
+        <div className="nf-brand"><span className="nf-logo">N</span><span><strong>NexaFunds</strong><small>Investor Portal</small></span></div>
+        <h1>Create Your NexaFunds Account</h1>
+        <p className="nf-auth-subtitle">Start your journey with a secure investor portal.</p>
         <div className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -310,7 +295,6 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
             {loading ? 'Creating Account...' : 'Create Account'}
           </button>
         </div>
-
         <div className="text-center mt-6">
           <p className="text-sm text-gray-500">
             Already have an account?{' '}
@@ -323,7 +307,10 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
             </button>
           </p>
         </div>
-      </div>
+      </div></main>
+      <aside className="nf-auth-visual" style={{ backgroundImage: `url(${NEXAFUNDS_IMAGES.register})` }}>
+        <div className="nf-auth-visual-content"><div className="nf-brand"><span className="nf-logo">N</span><span><strong>NexaFunds</strong><small>Secure Investor Portal</small></span></div><div className="nf-floating-card nf-register-info"><small>Platform access</small><strong>Real-Time Account Monitoring</strong><span>MT5 Integration</span><span>Portfolio Access</span></div></div>
+      </aside>
     </div>
   )
 }

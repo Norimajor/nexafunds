@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { NEXAFUNDS_IMAGES } from '../config/images'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -40,29 +41,14 @@ export default function Login() {
   }
 
   return (
-    <div
-      className="min-h-screen bg-cover bg-center flex items-center justify-center px-4 py-10 relative isolate"
-      style={{
-        backgroundImage:
-          "linear-gradient(135deg, rgba(8, 47, 73, .78), rgba(30, 27, 75, .58), rgba(88, 28, 135, .62)), url('https://plus.unsplash.com/premium_photo-1682310075673-b408eb1ca6fd?q=80&w=1600&auto=format&fit=crop')",
-      }}
-    >
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_75%_20%,rgba(45,212,191,.35),transparent_35%),linear-gradient(135deg,#082f49,#312e81_55%,#701a75)]" />
-      <div className="w-full max-w-md bg-white/95 rounded-3xl shadow-2xl shadow-cyan-950/40 p-8 backdrop-blur-md border border-white/70">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl mx-auto mb-4">
-            N
-          </div>
-
-          <h1 className="text-3xl font-bold text-slate-900">
-            Investor Login
-          </h1>
-
-          <p className="text-gray-500 mt-2">
-            Sign in to access your NexaFunds investor portal
-          </p>
-        </div>
-
+    <div className="nf-auth-page">
+      <aside className="nf-auth-visual" style={{ backgroundImage: `url(${NEXAFUNDS_IMAGES.login})` }}>
+        <div className="nf-auth-visual-content"><div className="nf-brand"><span className="nf-logo">N</span><span><strong>NexaFunds</strong><small>Investor Portal</small></span></div><div><h2>Your investment journey, connected.</h2><p>Clarity for every decision. Control for every account.</p></div></div>
+      </aside>
+      <main className="nf-auth-form-side"><div className="nf-auth-form">
+        <div className="nf-brand"><span className="nf-logo">N</span><span><strong>NexaFunds</strong><small>Investor Portal</small></span></div>
+        <h1>Welcome back</h1>
+        <p className="nf-auth-subtitle">Sign in to your investor account</p>
         <div className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -107,7 +93,7 @@ export default function Login() {
             Create New Account
           </button>
         </div>
-      </div>
+      </div></main>
     </div>
   )
 }
