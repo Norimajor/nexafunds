@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_BASE = import.meta.env.PROD ? '' : 'https://nexafunds.onrender.com'
+const API_BASE = 'https://nexafunds.onrender.com'
 const stages = ['Interpreting strategy', 'Validating conditions', 'Loading historical data', 'Running backtest', 'Calculating performance', 'Preparing analysis']
 const examples = [
   'Buy XAUUSD when RSI drops below 30 on the 15m chart, exit at 1.5% profit or 0.7% loss.',
