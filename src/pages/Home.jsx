@@ -4,9 +4,16 @@ export default function Home() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 text-white flex flex-col">
+    <div
+      className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-fuchsia-950 bg-cover bg-center bg-fixed text-white flex flex-col relative isolate"
+      style={{
+        backgroundImage:
+          "linear-gradient(120deg, rgba(2, 6, 23, .92), rgba(30, 27, 75, .72), rgba(49, 46, 129, .58)), url('https://unsplash.com/photos/colorful-audio-waveform-abstract-technology-background-represent-digital-equalizer-technology-3Kpu5lCBHP0')",
+      }}
+    >
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.28),transparent_38%),linear-gradient(135deg,#020617,#172554_55%,#581c87)]" />
       {/* Header */}
-      <header className="w-full px-6 py-5 flex items-center justify-between">
+      <header className="w-full px-6 py-5 flex items-center justify-between relative">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-lg">
             N
@@ -69,7 +76,7 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-16">
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
+            <div className="bg-cyan-950/45 border border-cyan-300/20 rounded-2xl p-5 backdrop-blur-sm">
               <div className="text-3xl mb-3">🔒</div>
               <h3 className="font-semibold mb-2">Secure Access</h3>
               <p className="text-sm text-slate-300">
@@ -77,7 +84,7 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
+            <div className="bg-fuchsia-950/45 border border-fuchsia-300/20 rounded-2xl p-5 backdrop-blur-sm">
               <div className="text-3xl mb-3">📈</div>
               <h3 className="font-semibold mb-2">Managed Investing</h3>
               <p className="text-sm text-slate-300">
@@ -85,7 +92,7 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
+            <div className="bg-amber-950/45 border border-amber-300/20 rounded-2xl p-5 backdrop-blur-sm">
               <div className="text-3xl mb-3">🤝</div>
               <h3 className="font-semibold mb-2">Investor Support</h3>
               <p className="text-sm text-slate-300">

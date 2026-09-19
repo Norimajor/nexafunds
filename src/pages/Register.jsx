@@ -118,8 +118,15 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-lg p-8">
+    <div
+      className="min-h-screen bg-cover bg-center flex items-center justify-center px-4 py-10 relative isolate"
+      style={{
+        backgroundImage:
+          "linear-gradient(125deg, rgba(30, 41, 59, .88), rgba(6, 78, 59, .72), rgba(154, 52, 18, .72)), url('https://unsplash.com/photos/business-people-collaboration-team-teamwork-professional-concept-HVrMcRg2510')",
+      }}
+    >
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(251,191,36,.3),transparent_34%),linear-gradient(125deg,#1e293b,#065f46_52%,#9a3412)]" />
+      <div className="w-full max-w-2xl bg-white/95 rounded-2xl shadow-2xl shadow-emerald-950/40 p-8 backdrop-blur-md border border-white/70">
         <div className="text-center mb-8">
           <div className="mx-auto mb-4 h-12 w-12 rounded-xl bg-blue-600 text-white text-xl font-bold flex items-center justify-center">
             N
