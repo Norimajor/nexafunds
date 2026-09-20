@@ -215,50 +215,51 @@ const initDatabases = async () => {
 // NFP FORECAST
 // ============================================================
 
-// Production NFP forecast data.
-// This endpoint is consumed by the NexaFunds Dashboard.
-//
-// IMPORTANT:
-// The frontend uses:
-//     GET /api/nfp/latest
-//
-// Keep this endpoint compatible with the USDNewsAI API response.
+// USDNewsAI owns the NFP model and reads the latest prediction and consensus
+// files. NexaFunds keeps the public route stable and proxies the live payload.
+const USDNEWS_AI_API_URL = (process.env.USDNEWS_AI_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+const USDNEWS_AI_TIMEOUT_MS = Number(process.env.USDNEWS_AI_TIMEOUT_MS || 10000)
 
-const NFP_DATA = {
-  prediction: 161.6820943737181,
-  ridge: 154.48211922899213,
-  random_forest: 139.6240549607354,
-  gradient_boosting: 193.34010064633543,
+const fetchLatestNfp = async () => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), USDNEWS_AI_TIMEOUT_MS)
 
-  forecast_release_date: '2026-09-04',
-  reference_month: '2026-08-01',
-  information_cutoff: '2026-08-15',
+  try {
+    const response = await fetch(`${USDNEWS_AI_API_URL}/api/nfp/latest`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    })
+    const data = await response.json().catch(() => null)
 
-  consensus: null,
-  consensus_nfp: null,
-  consensus_source: 'manual',
-  consensus_updated_at: '2026-08-16',
+    if (!response.ok || !data || data.error) {
+      const detail = data?.error || `USDNewsAI returned HTTP ${response.status}`
+      const error = new Error(detail)
+      error.status = response.ok ? 502 : response.status
+      throw error
+    }
 
-  expected_surprise: null,
-  surprise_percent: null,
-  direction: null,
-  magnitude: null,
-
-  prediction_time: '2026-08-16',
-  model: 'NFP V2 multi-indicator ensemble',
-  features: 63,
-  training_rows: 137,
+    return data
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // ------------------------------------------------------------
 // Latest NFP endpoint
 // ------------------------------------------------------------
 
-app.get('/api/nfp/latest', (req, res) => {
-  res.json({
-    success: true,
-    ...NFP_DATA,
-  })
+app.get('/api/nfp/latest', async (req, res) => {
+  try {
+    const data = await fetchLatestNfp()
+    res.json({ success: true, ...data })
+  } catch (error) {
+    const status = error.name === 'AbortError' ? 504 : error.status || 502
+    console.error('USDNewsAI NFP request failed:', error)
+    res.status(status).json({
+      success: false,
+      error: status === 504 ? 'USDNewsAI NFP request timed out.' : 'Could not reach USDNewsAI NFP predictor.',
+    })
+  }
 })
 
 // ------------------------------------------------------------
@@ -268,11 +269,18 @@ app.get('/api/nfp/latest', (req, res) => {
 // Keep /api/nfp working so any older NexaFunds code or other
 // clients using the previous endpoint do not break.
 
-app.get('/api/nfp', (req, res) => {
-  res.json({
-    success: true,
-    ...NFP_DATA,
-  })
+app.get('/api/nfp', async (req, res) => {
+  try {
+    const data = await fetchLatestNfp()
+    res.json({ success: true, ...data })
+  } catch (error) {
+    const status = error.name === 'AbortError' ? 504 : error.status || 502
+    console.error('USDNewsAI NFP request failed:', error)
+    res.status(status).json({
+      success: false,
+      error: status === 504 ? 'USDNewsAI NFP request timed out.' : 'Could not reach USDNewsAI NFP predictor.',
+    })
+  }
 })
 
 const ECONOMIC_DATA = {

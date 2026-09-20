@@ -1,5 +1,19 @@
 # React + Vite
 
+## NFP predictor
+
+The NexaFunds backend proxies the live NFP forecast from the USDNewsAI service at
+`GET /api/nfp/latest`. Set `USDNEWS_AI_API_URL` to the base URL of the running
+USDNewsAI API before starting the backend. For local development, the default is
+`http://127.0.0.1:8000`.
+
+Optional timeout configuration:
+
+```env
+USDNEWS_AI_API_URL=https://your-usdnewsai-service.example.com
+USDNEWS_AI_TIMEOUT_MS=10000
+```
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:
