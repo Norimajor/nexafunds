@@ -1,147 +1,119 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_BASE = (import.meta.env.VITE_NEXA_AI_API_URL || 'https://nexa-funds-ai.onrender.com').replace(/\/$/, '')
+const API_BASE = (import.meta.env.VITE_NEXA_AI_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 const USER_API_BASE = 'https://nexafunds.onrender.com'
-const stages = ['Interpreting strategy', 'Validating conditions', 'Loading historical data', 'Running backtest', 'Calculating performance', 'Preparing analysis']
-const examples = [
-  'Buy XAUUSD when RSI drops below 30 on the 15m chart, exit at 1.5% profit or 0.7% loss.',
-  'Scalp EURUSD during the London session using a 9/21 EMA crossover, max 2 trades per day.',
-  'Trend-follow US30 on the H1 chart, only long, trail stop at 1 ATR.',
-]
-const metrics = [
-  ['Trades', ['trades', 'total_trades', 'number_of_trades']], ['Winning Trades', ['winning_trades', 'wins']], ['Losing Trades', ['losing_trades', 'losses']],
-  ['Win Rate', ['win_rate', 'winning_rate']], ['Profit Factor', ['profit_factor']], ['Expectancy', ['expectancy']], ['Net Return', ['net_return', 'return', 'total_return']],
-  ['Maximum Drawdown', ['max_drawdown', 'maximum_drawdown']], ['Average R:R', ['average_rr', 'avg_rr', 'risk_reward']], ['Average Win', ['average_win', 'avg_win']],
-  ['Average Loss', ['average_loss', 'avg_loss']], ['Largest Win', ['largest_win', 'max_win']], ['Largest Loss', ['largest_loss', 'max_loss']],
-  ['Maximum Winning Streak', ['max_winning_streak', 'maximum_winning_streak']], ['Maximum Losing Streak', ['max_losing_streak', 'maximum_losing_streak']],
-]
+const ANONYMOUS_ID_KEY = 'nexafunds-ai-user-id'
+const CONVERSATION_KEY = 'nexafunds-ai-conversation'
 
-const objectValue = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
-const pick = (object, keys) => keys.map((key) => object?.[key]).find((value) => value !== null && value !== undefined && value !== '')
-const text = (value, fallback = 'N/A') => value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length) ? fallback : Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? value ? 'Yes' : 'No' : String(value)
-const title = (value) => String(value).replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+const makeId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`
+const getAnonymousId = () => {
+  const existing = localStorage.getItem(ANONYMOUS_ID_KEY)
+  if (existing) return existing
+  const id = `anonymous-${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+  localStorage.setItem(ANONYMOUS_ID_KEY, id)
+  return id
+}
+const getErrorMessage = (data, status) => data?.error || data?.detail || data?.message || `NEXA AI returned HTTP ${status}. Please try again.`
 
-function Badge({ value, tone = 'neutral' }) {
-  const colors = { good: 'bg-emerald-400/10 text-emerald-300 ring-emerald-400/20', warn: 'bg-amber-400/10 text-amber-300 ring-amber-400/20', bad: 'bg-rose-400/10 text-rose-300 ring-rose-400/20', neutral: 'bg-slate-400/10 text-slate-300 ring-slate-400/20' }
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${colors[tone]}`}>{text(value, 'Not available')}</span>
+export async function sendChatMessage(message, userId) {
+  const response = await fetch(`${API_BASE}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, user_id: userId }) })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(getErrorMessage(data, response.status))
+  return data
 }
 
-function Section({ name, eyebrow = 'Research', children }) {
-  return <section className="rounded-3xl border border-white/[0.08] bg-white/[0.045] p-5 shadow-[0_24px_70px_-28px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:p-6"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300/70">{eyebrow}</p><h3 className="mt-1 mb-5 text-lg font-semibold text-white">{name}</h3>{children}</section>
+export async function getBacktestJob(jobId) {
+  const response = await fetch(`${API_BASE}/backtest/jobs/${encodeURIComponent(jobId)}`)
+  const data = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(getErrorMessage(data, response.status))
+  return data
 }
 
-function Details({ values }) {
-  return <div className="grid gap-3 sm:grid-cols-2">{values.map(([label, value]) => <div key={label} className="rounded-2xl border border-white/[0.07] bg-slate-950/30 p-4"><p className="text-xs uppercase tracking-[0.12em] text-slate-500">{label}</p><p className="mt-2 break-words text-sm font-medium text-slate-100">{text(value)}</p></div>)}</div>
+const value = (object, keys, fallback = null) => keys.map((key) => object?.[key]).find((item) => item !== undefined && item !== null && item !== '') ?? fallback
+const display = (item, fallback = 'Not available') => item === null || item === undefined || item === '' ? fallback : typeof item === 'boolean' ? item ? 'Yes' : 'No' : String(item)
+const formatDuration = (seconds) => {
+  if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return 'estimating remaining time...'
+  const amount = Math.max(0, Math.round(Number(seconds)))
+  return amount < 60 ? `about ${amount} second${amount === 1 ? '' : 's'} remaining` : `about ${Math.round(amount / 60)} minute${Math.round(amount / 60) === 1 ? '' : 's'} remaining`
 }
 
-function Items({ values, empty = 'Not available' }) {
-  if (!Array.isArray(values) || !values.length) return <p className="text-sm text-slate-400">{empty}</p>
-  return <div className="space-y-3">{values.map((item, index) => <div key={index} className="rounded-2xl border border-white/[0.07] bg-slate-950/30 p-4">{objectValue(item) ? <div className="grid gap-2 sm:grid-cols-2">{Object.entries(item).map(([key, value]) => <div key={key}><span className="text-xs uppercase tracking-[0.1em] text-slate-500">{title(key)}</span><p className="mt-1 text-sm text-slate-200">{text(value)}</p></div>)}</div> : <p className="text-sm text-slate-200">{text(item)}</p>}</div>)}</div>
+function Progress({ progress }) {
+  const percent = Math.max(0, Math.min(100, Number(progress.progress || 0) * 100))
+  return <div className="mt-4 rounded-2xl border border-sky-400/20 bg-sky-400/[0.06] p-4"><div className="flex items-center justify-between text-xs text-slate-300"><span>Backtest progress</span><strong className="text-sky-300">{Math.round(percent)}%</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-300 transition-all" style={{ width: `${percent}%` }} /></div><div className="mt-3 grid gap-2 text-xs text-slate-400 sm:grid-cols-2"><span>{display(value(progress, ['current_dataset', 'dataset', 'symbol']), 'Dataset pending')}</span><span>{display(value(progress, ['current_combination', 'combination']), 'Combination pending')}</span><span>{display(progress.completed, '0')} / {display(progress.total, 'estimating')} completed</span><span>{display(progress.elapsed_seconds, '...')} elapsed</span><span className="sm:col-span-2">{formatDuration(value(progress, ['eta_seconds', 'estimated_remaining_seconds']))}</span></div></div>
 }
 
-function Chart({ chartTitle, values, color = 'bg-sky-400' }) {
-  const numbers = values.map(Number).filter(Number.isFinite)
-  if (!numbers.length) return null
-  const min = Math.min(...numbers)
-  const max = Math.max(...numbers)
-  return <div className="rounded-2xl border border-white/[0.07] bg-slate-950/30 p-4"><p className="mb-4 text-sm font-medium text-slate-200">{chartTitle}</p><div className="flex h-28 items-end gap-1">{numbers.map((value, index) => <div key={index} title={text(value)} className={`min-w-[3px] flex-1 rounded-t ${color}`} style={{ height: `${Math.max(4, max === min ? 50 : ((value - min) / (max - min)) * 96 + 4)}%` }} />)}</div></div>
+const candidateFields = [['Strategy', ['strategy', 'combination', 'name', 'strategy_name']], ['Symbol', ['symbol']], ['Timeframe', ['timeframe']], ['EA platform', ['ea_platform', 'platform']], ['Trades', ['trades', 'total_trades', 'number_of_trades']], ['Win rate', ['win_rate', 'winning_rate']], ['Profit factor', ['profit_factor']], ['Expectancy', ['expectancy']], ['Net profit / return', ['net_profit', 'net_return', 'return', 'total_return']], ['Maximum drawdown', ['maximum_drawdown', 'max_drawdown']], ['Walk-forward', ['walk_forward_status', 'walk_forward_validation', 'validation_status']]]
+
+function Candidates({ job }) {
+  const result = job?.result || job?.results || job?.data || job
+  const candidates = value(result, ['candidates', 'ranked_candidates', 'candidate_strategies'], [])
+  if (!Array.isArray(candidates) || !candidates.length) return <p className="mt-3 text-sm text-slate-400">No ranked candidates were returned.</p>
+  return <div className="mt-4 space-y-3">{candidates.map((candidate, index) => <div key={candidate.id || index} className="rounded-2xl border border-white/[0.08] bg-slate-950/30 p-4"><div className="mb-3 flex items-center justify-between"><p className="font-semibold text-slate-100">#{index + 1} {display(value(candidate, ['strategy', 'combination', 'name', 'strategy_name']), 'Candidate')}</p><span className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Historical evidence</span></div><div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">{candidateFields.slice(1).map(([label, keys]) => <div key={label}><p className="text-slate-500">{label}</p><p className="mt-1 break-words text-slate-200">{display(value(candidate, keys))}</p></div>)}</div></div>)}</div>
 }
 
-function TradeLedger({ trades }) {
-  const [page, setPage] = useState(1)
-  const [sort, setSort] = useState({ key: 'entry_time', direction: 'desc' })
-  const columns = [['trade_id', 'Trade ID'], ['symbol', 'Symbol'], ['timeframe', 'Timeframe'], ['direction', 'Direction'], ['entry_time', 'Entry time'], ['entry_price', 'Entry price'], ['stop_loss', 'Stop loss'], ['take_profit', 'Take profit'], ['exit_time', 'Exit time'], ['exit_price', 'Exit price'], ['position_size', 'Position size'], ['gross_pnl', 'Gross P/L'], ['commission', 'Commission'], ['spread', 'Spread'], ['slippage', 'Slippage'], ['net_pnl', 'Net P/L'], ['r_multiple', 'R multiple'], ['exit_reason', 'Exit reason'], ['result', 'Result'], ['balance', 'Balance']]
-  const sorted = [...trades].sort((left, right) => { const a = left?.[sort.key] ?? ''; const b = right?.[sort.key] ?? ''; const comparison = String(a).localeCompare(String(b), undefined, { numeric: true }); return sort.direction === 'asc' ? comparison : -comparison })
-  const totalPages = Math.max(1, Math.ceil(sorted.length / 8))
-  const visible = sorted.slice((page - 1) * 8, page * 8)
-  const changeSort = (key) => { setPage(1); setSort((current) => current.key === key ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' }) }
-  return <Section name="Trade Ledger" eyebrow="Execution evidence"><div className="overflow-x-auto"><table className="min-w-[1500px] text-left text-xs"><thead><tr className="border-b border-white/10">{columns.map(([key, label]) => <th key={key} className="whitespace-nowrap px-3 py-3 font-semibold text-slate-400"><button type="button" onClick={() => changeSort(key)}>{label} {sort.key === key ? (sort.direction === 'asc' ? '^' : 'v') : ''}</button></th>)}</tr></thead><tbody>{visible.map((trade, index) => <tr key={trade.trade_id || trade.id || index} className="border-b border-white/[0.06] text-slate-200">{columns.map(([key]) => <td key={key} className="whitespace-nowrap px-3 py-3">{text(trade?.[key])}</td>)}</tr>)}</tbody></table></div><div className="mt-4 flex items-center justify-between text-sm text-slate-400"><span>{trades.length} trade{trades.length === 1 ? '' : 's'}</span><div className="flex items-center gap-3"><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="rounded-xl border border-white/10 px-3 py-1.5 disabled:opacity-40">Previous</button><span>Page {page} of {totalPages}</span><button type="button" disabled={page === totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-xl border border-white/10 px-3 py-1.5 disabled:opacity-40">Next</button></div></div></Section>
+function Result({ job }) {
+  const result = job?.result || job?.results || job?.data || job
+  return <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] p-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Historical backtest evidence</p><p className="mt-2 text-sm text-slate-200">{display(value(result, ['summary', 'message']), 'The historical backtest completed. Review the ranked candidates below as evidence, not a guarantee of future profitability.')}</p><div className="mt-4 grid grid-cols-3 gap-3 text-xs"><div><p className="text-slate-500">Datasets tested</p><p className="mt-1 text-lg font-semibold text-slate-100">{display(value(result, ['datasets_tested', 'tested_datasets', 'total_datasets']))}</p></div><div><p className="text-slate-500">Skipped</p><p className="mt-1 text-lg font-semibold text-slate-100">{display(value(result, ['skipped_datasets', 'datasets_skipped']))}</p></div><div><p className="text-slate-500">Candidates</p><p className="mt-1 text-lg font-semibold text-slate-100">{display(value(result, ['aggregate_candidate_count', 'candidate_count', 'total_candidates']))}</p></div></div><Candidates job={job} /></div>
 }
 
-function Results({ analysis }) {
-  const strategy = objectValue(analysis.strategy) ? analysis.strategy : {}
-  const validation = objectValue(analysis.validation) ? analysis.validation : {}
-  const data = objectValue(analysis.data) ? analysis.data : {}
-  const backtest = objectValue(analysis.backtest) ? analysis.backtest : {}
-  const metricsData = objectValue(backtest.metrics) ? backtest.metrics : backtest
-  const execution = objectValue(backtest.execution) ? backtest.execution : objectValue(backtest.configuration) ? backtest.configuration : {}
-  const trades = Array.isArray(analysis.trades) ? analysis.trades : Array.isArray(backtest.trades) ? backtest.trades : []
-  const risk = objectValue(strategy.risk) ? strategy.risk : {}
-  const status = (value) => String(value || '').toLowerCase().replace(/[- ]/g, '_')
-  const value = (object, keys) => pick(object, keys)
-  const invalidData = ['invalid', 'unavailable', 'error', 'failed'].some((item) => status(value(data, ['status', 'availability', 'state'])).includes(item)) || (Array.isArray(validation.errors) && validation.errors.length > 0)
-  const interpretation = [['Symbol', strategy.symbol], ['Timeframe', strategy.timeframe], ['Direction', strategy.direction], ['Indicator', value(strategy, ['indicator', 'indicators'])], ['Period', value(strategy, ['period', 'indicator_period'])], ['Operator', strategy.operator], ['Threshold', strategy.threshold], ['Entry semantics', value(strategy, ['entry_semantics', 'entry_logic'])], ['Risk percentage', value(strategy, ['risk_percentage', 'risk_percent']) ?? value(risk, ['percentage', 'risk_percentage'])], ['Stop loss', value(strategy, ['stop_loss', 'stop_loss_policy'])], ['Take profit', value(strategy, ['take_profit', 'take_profit_policy'])], ['Exit policy', value(strategy, ['exit_policy', 'exit_conditions'])], ['Position sizing', value(strategy, ['position_sizing', 'position_sizing_model'])], ['Maximum simultaneous positions', value(strategy, ['max_simultaneous_positions', 'maximum_simultaneous_positions'])], ['Pyramiding', strategy.pyramiding], ['Assumptions', strategy.assumptions]]
-  const quality = [['Data status', value(data, ['status', 'availability'])], ['Data source', value(data, ['source', 'data_source'])], ['Candle count', value(data, ['candle_count', 'candles', 'number_of_candles'])], ['Start date', value(data, ['start_date', 'start'])], ['End date', value(data, ['end_date', 'end'])], ['Missing periods', data.missing_periods], ['Duplicate timestamps', value(data, ['duplicate_timestamps', 'duplicates'])], ['Invalid candles', data.invalid_candles], ['Timezone', data.timezone], ['Validation errors', value(validation, ['errors', 'validation_errors'])]]
-  const metricValues = [['Total trades', value(metricsData, ['total_trades', 'trades', 'number_of_trades'])], ['Wins', value(metricsData, ['wins', 'winning_trades'])], ['Losses', value(metricsData, ['losses', 'losing_trades'])], ['Breakeven trades', value(metricsData, ['breakeven_trades', 'breakeven'])], ['Win rate', metricsData.win_rate], ['Gross profit', metricsData.gross_profit], ['Gross loss', metricsData.gross_loss], ['Net profit', metricsData.net_profit], ['Net return', value(metricsData, ['net_return', 'return', 'total_return'])], ['Profit factor', metricsData.profit_factor], ['Expectancy', metricsData.expectancy], ['Average win', value(metricsData, ['average_win', 'avg_win'])], ['Average loss', value(metricsData, ['average_loss', 'avg_loss'])], ['Average R multiple', value(metricsData, ['average_r_multiple', 'avg_r_multiple', 'average_rr'])], ['Maximum drawdown', value(metricsData, ['maximum_drawdown', 'max_drawdown'])], ['Drawdown percentage', value(metricsData, ['drawdown_percentage', 'max_drawdown_percent'])], ['Largest win', value(metricsData, ['largest_win', 'max_win'])], ['Largest loss', value(metricsData, ['largest_loss', 'max_loss'])], ['Winning streak', value(metricsData, ['winning_streak', 'max_winning_streak'])], ['Losing streak', value(metricsData, ['losing_streak', 'max_losing_streak'])], ['Average trade duration', metricsData.average_trade_duration], ['Trade frequency', metricsData.trade_frequency]]
-  const configuration = [['Initial balance', value(execution, ['initial_balance', 'starting_balance'])], ['Risk percentage', value(execution, ['risk_percentage', 'risk_percent'])], ['Position sizing model', value(execution, ['position_sizing_model', 'position_sizing'])], ['Spread', execution.spread], ['Commission', execution.commission], ['Slippage', execution.slippage], ['Same-candle SL/TP policy', value(execution, ['same_candle_sl_tp_policy', 'same_candle_policy'])], ['Stop-loss policy', execution.stop_loss_policy], ['Take-profit policy', execution.take_profit_policy], ['Maximum simultaneous positions', execution.max_simultaneous_positions], ['Zero-balance behavior', execution.zero_balance_behavior], ['Negative-equity behavior', execution.negative_equity_behavior]]
-  const balances = trades.map((trade) => trade?.balance).filter((item) => item !== undefined && item !== null)
-  const pnl = trades.map((trade) => value(trade, ['net_pnl', 'pnl', 'profit_loss'])).filter((item) => item !== undefined && item !== null)
-  return <div className="space-y-6"><Section name="Strategy Interpretation" eyebrow="Interpretation"><Details values={interpretation} /><div className="mt-4"><p className="mb-2 text-xs uppercase tracking-[0.12em] text-slate-500">Entry conditions</p><Items values={strategy.entry_conditions || strategy.conditions} /></div></Section><Section name="Data Quality" eyebrow="Validation"><Badge value={value(data, ['status', 'availability'])} tone={invalidData ? 'bad' : 'good'} /><div className="mt-4"><Details values={quality} /></div>{invalidData && <p className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">The backend reported that market data is unavailable or invalid. Performance metrics, charts, and trades are hidden until valid data is returned.</p>}</Section>{!invalidData && <><Section name="Backtest Results" eyebrow="Performance"><div className="mb-4 flex flex-wrap items-center gap-3"><Badge value={value(backtest, ['status', 'state'])} tone={status(value(backtest, ['status', 'state'])) === 'completed' ? 'good' : status(value(backtest, ['status', 'state'])) === 'no_trades' ? 'warn' : 'neutral'} />{status(value(backtest, ['status', 'state'])) === 'no_trades' && <span className="text-sm text-amber-300">The backend completed the test without generating trades.</span>}</div><div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">{metricValues.map(([label, metric]) => <div key={label} className="rounded-2xl border border-white/[0.07] bg-slate-950/30 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-lg font-semibold tabular-nums text-slate-100">{text(metric)}</p></div>)}</div></Section><Section name="Execution Configuration" eyebrow="Backtest settings"><Details values={configuration} /></Section><div className="grid gap-6 md:grid-cols-3"><Chart chartTitle="Equity curve" values={balances} /><Chart chartTitle="Drawdown from trade balances" values={balances.map((item, index) => Number(item) - Math.max(...balances.slice(0, index + 1).map(Number)))} color="bg-rose-400" /><Chart chartTitle="Trade P/L distribution" values={pnl} color="bg-emerald-400" /></div>{trades.length > 0 && <TradeLedger trades={trades} />}</>}</div>
+function Message({ message }) {
+  const assistant = message.role === 'assistant'
+  return <div className={`flex ${assistant ? 'justify-start' : 'justify-end'}`}><div className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[78%] ${assistant ? 'rounded-tl-md border border-white/[0.08] bg-slate-900/80 text-slate-200' : 'rounded-tr-md bg-gradient-to-br from-blue-600 to-cyan-500 text-white'}`}><p className="whitespace-pre-wrap">{message.content}</p>{message.questions?.length > 0 && <div className="mt-3 space-y-2 border-t border-white/10 pt-3">{message.questions.map((question, index) => <p key={question.field || index} className="text-slate-300"><span className="font-medium text-sky-300">{question.field ? `${question.field}: ` : ''}</span>{question.question || question}</p>)}</div>}{message.progress && <Progress progress={message.progress} />}{message.job && <Result job={message.job} />}</div></div>
 }
 
-function SupplementalResults({ analysis }) {
-  const optimization = objectValue(analysis.optimization) ? analysis.optimization : null
-  const walkForward = objectValue(analysis.walk_forward) ? analysis.walk_forward : null
-  const hasAnalysis = analysis.strengths || analysis.weaknesses || analysis.summary
-  if (!optimization && !walkForward && !hasAnalysis) return null
-  return <><Section name="Analysis" eyebrow="Evidence review"><div className="grid gap-4 md:grid-cols-2">{[['Strengths', analysis.strengths], ['Weaknesses', analysis.weaknesses], ['Profitable conditions', analysis.profitable_conditions], ['Poor conditions', analysis.poor_conditions], ['Session analysis', analysis.session_analysis], ['Regime analysis', analysis.regimes || analysis.regime_analysis], ['Recommendations', analysis.recommendations], ['Limitations', analysis.limitations]].map(([label, value]) => <div key={label}><p className="mb-2 text-xs uppercase tracking-[0.12em] text-slate-500">{label}</p><Items values={value} /></div>)}</div></Section>{optimization && <Section name="Optimization" eyebrow="Tested variations"><Details values={[['Optimization status', pick(optimization, ['status', 'state'])], ['Baseline metrics', optimization.baseline_metrics], ['Trade-offs', optimization.trade_offs || optimization.tradeoffs]]} /><div className="mt-4"><p className="mb-2 text-xs uppercase tracking-[0.12em] text-slate-500">Candidate variations</p><Items values={optimization.candidates || optimization.candidate_variations || optimization.candidate_strategies} /></div><div className="mt-4"><p className="mb-2 text-xs uppercase tracking-[0.12em] text-slate-500">Parameter changes and candidate results</p><Items values={optimization.parameter_changes || optimization.results} /></div></Section>}{walkForward && <Section name="Walk-Forward Validation" eyebrow="Out-of-sample review"><Details values={[['Validation status', walkForward.status], ['Training period', walkForward.training_period], ['Test period', walkForward.test_period], ['Training metrics', walkForward.training_metrics], ['Out-of-sample metrics', walkForward.out_of_sample_metrics || walkForward.test_metrics], ['Test trade count', walkForward.test_trade_count], ['Robustness status', walkForward.robustness_status || walkForward.robustness?.status], ['Robustness observations', walkForward.robustness_observations || walkForward.robustness?.observations]]} /><div className="mt-4"><p className="mb-2 text-xs uppercase tracking-[0.12em] text-slate-500">Validation windows, labeled out-of-sample</p><Items values={walkForward.windows || walkForward.validation_windows} empty="No validation windows were supplied." /></div></Section>}{analysis.summary && <section className="rounded-3xl border border-sky-400/20 bg-sky-400/[0.07] p-6"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300/70">Research conclusion</p><p className="mt-3 text-lg leading-8 text-slate-100">{text(analysis.summary)}</p></section>}</>
-}
-
-const BackendResults = Results
-
-function _LegacyResults({ analysis }) {
-  const strategy = objectValue(analysis.strategy) ? analysis.strategy : {}
-  const validation = objectValue(analysis.validation) ? analysis.validation : null
-  const data = objectValue(analysis.data) ? analysis.data : null
-  const backtest = objectValue(analysis.backtest) ? analysis.backtest : null
-  const optimization = objectValue(analysis.optimization) ? analysis.optimization : null
-  const walkForward = objectValue(analysis.walk_forward) ? analysis.walk_forward : null
-  const risk = objectValue(strategy.risk) ? strategy.risk : {}
-  const status = (value) => String(value || '').toLowerCase()
-
-  return <div className="space-y-6">
-    <Section name="Strategy" eyebrow="Interpretation"><Details values={[['Name', strategy.name], ['Symbol', strategy.symbol], ['Timeframe', strategy.timeframe], ['Direction', strategy.direction], ['Risk percentage', pick(strategy, ['risk_percentage', 'risk_percent']) ?? pick(risk, ['percentage', 'risk_percentage'])], ['Risk / reward', pick(strategy, ['risk_reward', 'risk_reward_ratio']) ?? pick(risk, ['risk_reward', 'reward_risk'])]]} /><div className="mt-4 grid gap-4 sm:grid-cols-2"><div><p className="mb-2 text-xs uppercase tracking-[0.12em] text-slate-500">Entry conditions</p><Items values={strategy.entry_conditions || strategy.conditions} /></div><div><p className="mb-2 text-xs uppercase tracking-[0.12em] text-slate-500">Exit conditions</p><Items values={strategy.exit_conditions || strategy.exits} /></div></div></Section>
-    {validation && <Section name="Validation" eyebrow="Quality checks"><Badge value={pick(validation, ['status', 'state'])} tone={status(pick(validation, ['status', 'state'])).includes('invalid') ? 'bad' : status(pick(validation, ['status', 'state'])).includes('warn') ? 'warn' : 'good'} /><div className="mt-4"><Details values={['Errors', 'Warnings'].map((key) => [key, validation[key.toLowerCase()]])} /></div></Section>}
-    {data && <Section name="Historical Data" eyebrow="Market data"><Details values={[['Availability', pick(data, ['status', 'availability'])], ['Symbol', data.symbol], ['Timeframe', data.timeframe], ['Start date', data.start_date || data.start], ['End date', data.end_date || data.end], ['Candles', data.candles || data.number_of_candles], ['Source', data.source]]} />{status(pick(data, ['status', 'availability'])) === 'unavailable' && <p className="mt-4 text-sm text-amber-300">Historical data was unavailable, so a real backtest could not be produced.</p>}</Section>}
-    {backtest && <Section name="Backtest" eyebrow="Performance"><div className="mb-4 flex flex-wrap items-center gap-3"><Badge value={pick(backtest, ['status', 'state'])} tone={status(pick(backtest, ['status', 'state'])) === 'completed' ? 'good' : status(pick(backtest, ['status', 'state'])) === 'no_trades' ? 'warn' : 'neutral'} />{status(pick(backtest, ['status', 'state'])) === 'no_trades' && <span className="text-sm text-amber-300">Data exists, but this strategy generated no valid trades.</span>}</div><div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">{metrics.map(([label, keys]) => <div key={label} className="rounded-2xl border border-white/[0.07] bg-slate-950/30 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-lg font-semibold tabular-nums text-slate-100">{text(pick(backtest.metrics || backtest, keys))}</p></div>)}</div></Section>}
-    {Array.isArray(analysis.weaknesses) && <Section name="Weaknesses" eyebrow="Risk review"><Items values={analysis.weaknesses} /></Section>}
-    {Array.isArray(analysis.improvements) && <Section name="Improvements" eyebrow="Refinement ideas"><Items values={analysis.improvements} /></Section>}
-    {optimization && <Section name="Optimization" eyebrow="Parameter search"><div className="mb-4 flex flex-wrap items-center gap-3"><Badge value={pick(optimization, ['status', 'state'])} tone={status(pick(optimization, ['status', 'state'])) === 'skipped' ? 'warn' : 'neutral'} />{status(pick(optimization, ['status', 'state'])) === 'skipped' && <span className="text-sm text-slate-400">Optimization was not run for this analysis.</span>}</div><Items values={optimization.candidates || optimization.candidate_strategies} /></Section>}
-    {walkForward && <Section name="Walk-Forward Validation" eyebrow="Out-of-sample review"><Badge value={walkForward.status} tone={status(walkForward.status) === 'completed' ? 'good' : 'neutral'} /><p className="my-4 text-sm text-slate-300">{text(walkForward.summary, 'No walk-forward summary was supplied.')}</p><Items values={walkForward.windows} empty="No validation windows were supplied. Generated windows are not the same as successful validation." /></Section>}
-    {analysis.summary && <section className="rounded-3xl border border-sky-400/20 bg-sky-400/[0.07] p-6"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300/70">Research conclusion</p><p className="mt-3 text-lg leading-8 text-slate-100">{text(analysis.summary)}</p></section>}
-  </div>
+function Typing() {
+  return <div className="flex justify-start"><div className="rounded-2xl rounded-tl-md border border-white/[0.08] bg-slate-900/80 px-4 py-3 text-sm text-slate-400">NEXA AI is thinking...</div></div>
 }
 
 export default function StrategyAI() {
   const navigate = useNavigate()
-  const [theme, setTheme] = useState(() => (typeof window !== 'undefined' && localStorage.getItem('nexafunds-theme')) || 'dark')
+  const [theme, setTheme] = useState(() => localStorage.getItem('nexafunds-theme') || 'dark')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [user, setUser] = useState({ first_name: 'Investor' })
-  const [prompt, setPrompt] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [analysis, setAnalysis] = useState(null)
+  const [userId, setUserId] = useState(() => getAnonymousId())
+  const [messages, setMessages] = useState(() => { try { return JSON.parse(localStorage.getItem(CONVERSATION_KEY) || '[]') } catch { return [] } })
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+  const bottomRef = useRef(null)
+  const pollTimers = useRef(new Set())
 
   useEffect(() => { document.documentElement.style.colorScheme = theme; localStorage.setItem('nexafunds-theme', theme) }, [theme])
-  useEffect(() => { let cancelled = false; fetch(`${USER_API_BASE}/api/auth/me`, { credentials: 'include' }).then((response) => response.json()).then((data) => { if (!cancelled && data.success && data.user) setUser(data.user) }).catch((fetchError) => console.error('Failed to fetch user:', fetchError)); return () => { cancelled = true } }, [])
+  useEffect(() => { localStorage.setItem(CONVERSATION_KEY, JSON.stringify(messages)); bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => {
+    let cancelled = false
+    const timers = pollTimers.current
+    fetch(`${USER_API_BASE}/api/auth/me`, { credentials: 'include' }).then((response) => response.json()).then((data) => { if (!cancelled && data.success && data.user) { setUser(data.user); setUserId(String(data.user.id || data.user.user_id || data.user.email || getAnonymousId())) } }).catch(() => {})
+    return () => { cancelled = true; timers.forEach((timer) => window.clearTimeout(timer)) }
+  }, [])
 
-  const analyze = async () => {
-    const value = prompt.trim()
-    if (!value) { setError('Describe a trading strategy before analyzing it.'); return }
-    if (loading) return
-    setLoading(true); setError(''); setAnalysis(null)
-    const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 60000)
+  const updateMessage = (id, changes) => setMessages((current) => current.map((message) => message.id === id ? { ...message, ...changes } : message))
+  const pollJob = async (jobId, progressId) => {
     try {
-      const response = await fetch(`${API_BASE}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: value }), signal: controller.signal })
-      const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || data?.detail || data?.message || `NEXA AI returned HTTP ${response.status}.`)
-      if (!data || typeof data !== 'object' || data.success !== true) throw new Error(data?.error || 'The NEXA AI service returned a malformed analysis.')
-      setAnalysis(data)
-    } catch (requestError) { setError(requestError.name === 'AbortError' ? 'The NEXA AI service took too long to respond. Please try again.' : requestError instanceof TypeError ? 'Could not connect to the NEXA AI service. Please try again shortly.' : requestError.message || 'Could not complete the strategy analysis.') } finally { window.clearTimeout(timeout); setLoading(false) }
+      const job = await getBacktestJob(jobId)
+      const status = String(job.status || job.state || '').toLowerCase()
+      if (status === 'completed') updateMessage(progressId, { content: 'The backtest is complete. Here are the ranked historical results.', progress: null, job })
+      else if (status === 'failed') updateMessage(progressId, { content: `The backtest could not be completed: ${display(job.error, 'The backend reported an unknown error.')}`, progress: null, error: true })
+      else { updateMessage(progressId, { progress: job }); const timer = window.setTimeout(() => { pollTimers.current.delete(timer); pollJob(jobId, progressId) }, 3000); pollTimers.current.add(timer) }
+    } catch (error) { updateMessage(progressId, { content: `The backtest progress could not be loaded: ${error.message}. Please try again later.`, progress: null, error: true }) }
+  }
+
+  const send = async () => {
+    const message = draft.trim()
+    if (!message || sending) return
+    const userMessage = { id: makeId(), role: 'user', content: message }
+    setMessages((current) => [...current, userMessage]); setDraft(''); setSending(true)
+    try {
+      const data = await sendChatMessage(message, userId)
+      if (!data || data.success !== true) throw new Error(data?.error || 'The NEXA AI service returned an invalid response.')
+      const responseMessage = { id: makeId(), role: 'assistant', content: data.message || 'I received your request.', questions: data.questions }
+      const status = String(data.status || '').toLowerCase()
+      if (['queued', 'running'].includes(status) && data.job_id) { responseMessage.content = data.message || 'I started the backtest. I will keep you updated here.'; responseMessage.progress = { progress: 0, status }; setMessages((current) => [...current, responseMessage]); pollJob(data.job_id, responseMessage.id) }
+      else setMessages((current) => [...current, responseMessage])
+    } catch (error) { setMessages((current) => [...current, { id: makeId(), role: 'assistant', content: `I could not reach NEXA AI: ${error.message}. Please retry your message.`, error: true }]) } finally { setSending(false) }
   }
 
   const nav = [['Overview', '/dashboard'], ['Portfolio', '/portfolio'], ['Transactions', '/transactions'], ['Strategy AI', '/strategy-ai']]
-  const sidebar = <><div className="mb-10 flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white">N</div><div><h1 className="text-xl font-bold tracking-tight">NexaFunds</h1><p className="text-xs text-slate-400">Investor Portal</p></div></div><nav className="space-y-2">{nav.map(([label, path]) => <button key={label} type="button" onClick={() => { setMobileOpen(false); navigate(path) }} className={`w-full rounded-2xl px-4 py-3 text-left text-sm font-medium ${label === 'Strategy AI' ? 'bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white' : 'text-slate-300 hover:bg-white/[0.06]'}`}>{label}</button>)}</nav><div className="mt-auto rounded-3xl border border-white/10 bg-white/[0.04] p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Engine</p><h3 className="mt-3 text-lg font-semibold">NEXA AI</h3><p className="mt-1 text-sm text-slate-400">Strategy research interpreter</p></div></>
-  return <div className="min-h-screen overflow-x-hidden bg-[#070b16] text-slate-100"><div className="pointer-events-none fixed inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.20),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(99,102,241,0.18),transparent_60%)]" /><div className="relative mx-auto flex min-h-screen max-w-[1600px]"><aside className="hidden min-h-screen w-72 shrink-0 flex-col border-r border-white/10 bg-white/[0.03] p-6 backdrop-blur-2xl lg:flex">{sidebar}</aside>{mobileOpen && <div className="fixed inset-0 z-50 lg:hidden"><div className="absolute inset-0 bg-slate-950/70" onClick={() => setMobileOpen(false)} /><aside className="absolute left-0 top-0 flex h-full w-72 flex-col bg-[#0b1120] p-6">{sidebar}</aside></div>}<main className="min-w-0 flex-1 px-5 py-8 sm:px-8"><header className="mb-8 flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3"><button type="button" onClick={() => setMobileOpen(true)} className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm lg:hidden">Menu</button><div><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300/70">Strategy AI</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">Welcome, {user.first_name || 'Investor'}</h2><p className="mt-1 text-sm text-slate-400">Describe a trading strategy in plain English and NEXA AI will structure the research.</p></div></div><button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm">{theme === 'dark' ? 'Light' : 'Dark'}</button></header><div className="grid gap-6 xl:grid-cols-[minmax(300px,0.7fr)_minmax(0,1.3fr)]"><section className="h-fit rounded-3xl border border-white/[0.08] bg-white/[0.045] p-6 backdrop-blur-xl"><div className="mb-4 flex items-center justify-between"><h3 className="text-lg font-semibold">Describe your strategy</h3><Badge value="NEXA AI" tone="good" /></div><textarea rows={8} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="e.g. Buy EURUSD when EMA 9 crosses above EMA 21." className="w-full resize-y rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2.5 text-slate-100 outline-none focus:border-sky-500/60" /><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={analyze} disabled={loading} className="rounded-2xl bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading ? 'Analyzing...' : 'Analyze strategy'}</button><button type="button" disabled={loading} onClick={() => { setPrompt(''); setAnalysis(null); setError('') }} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm disabled:opacity-50">Clear</button></div>{error && <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4"><p className="text-sm font-semibold text-rose-300">Analysis failed</p><p className="mt-1 text-sm text-slate-300">{error}</p></div>}<div className="mt-6"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Examples</p><div className="mt-3 space-y-2">{examples.map((example) => <button key={example} type="button" disabled={loading} onClick={() => setPrompt(example)} className="w-full rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left text-sm text-slate-300 hover:border-sky-400/40 disabled:opacity-50">{example}</button>)}</div></div></section><div>{loading ? <section className="rounded-3xl border border-white/[0.08] bg-white/[0.045] p-6"><p className="text-lg font-semibold text-white">Analyzing Strategy</p><p className="mt-2 text-sm text-slate-400">NEXA AI is processing the request. These are workflow stages, not claimed backend progress.</p><div className="mt-6 space-y-3">{stages.map((stage) => <div key={stage} className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-slate-950/30 p-4"><span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" /><span className="text-sm text-slate-300">{stage}</span></div>)}</div></section> : analysis ? <><BackendResults analysis={analysis} /><SupplementalResults analysis={analysis} /></> : <section className="rounded-3xl border border-dashed border-white/10 bg-white/[0.025] p-8 text-center"><p className="text-lg font-semibold text-white">Ready for a strategy brief</p><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-400">Describe entries, exits, risk, and timeframe in natural language. The live NEXA AI service will return available research evidence here.</p></section>}</div></div></main></div></div>
+  const sidebar = <><div className="mb-10 flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white">N</div><div><h1 className="text-xl font-bold tracking-tight">NexaFunds</h1><p className="text-xs text-slate-400">Investor Portal</p></div></div><nav className="space-y-2">{nav.map(([label, path]) => <button key={label} type="button" onClick={() => { setMobileOpen(false); navigate(path) }} className={`w-full rounded-2xl px-4 py-3 text-left text-sm font-medium ${label === 'Strategy AI' ? 'bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white' : 'text-slate-300 hover:bg-white/[0.06]'}`}>{label}</button>)}</nav><div className="mt-auto rounded-3xl border border-white/10 bg-white/[0.04] p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Engine</p><h3 className="mt-3 text-lg font-semibold">NEXA AI</h3><p className="mt-1 text-sm text-slate-400">Conversational strategy research</p></div></>
+  return <div className="min-h-screen overflow-x-hidden bg-[#070b16] text-slate-100"><div className="pointer-events-none fixed inset-0 bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.20),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(99,102,241,0.18),transparent_60%)]" /><div className="relative mx-auto flex min-h-screen max-w-[1600px]"><aside className="hidden min-h-screen w-72 shrink-0 flex-col border-r border-white/10 bg-white/[0.03] p-6 backdrop-blur-2xl lg:flex">{sidebar}</aside>{mobileOpen && <div className="fixed inset-0 z-50 lg:hidden"><div className="absolute inset-0 bg-slate-950/70" onClick={() => setMobileOpen(false)} /><aside className="absolute left-0 top-0 flex h-full w-72 flex-col bg-[#0b1120] p-6">{sidebar}</aside></div>}<main className="min-w-0 flex-1 px-5 py-8 sm:px-8"><header className="mb-8 flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3"><button type="button" onClick={() => setMobileOpen(true)} className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm lg:hidden">Menu</button><div><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300/70">Strategy AI</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">Welcome, {user.first_name || 'Investor'}</h2><p className="mt-1 text-sm text-slate-400">Ask NEXA AI about strategy research and historical backtests.</p></div></div><button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm">{theme === 'dark' ? 'Light' : 'Dark'}</button></header><section className="flex h-[calc(100vh-190px)] min-h-[520px] flex-col overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.045] backdrop-blur-xl"><div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4 sm:px-6"><div><h3 className="font-semibold">NEXA AI research desk</h3><p className="mt-1 text-xs text-slate-400">Historical evidence only. Results do not guarantee future profitability.</p></div><span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300">Online</span></div><div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6">{messages.length === 0 && <div className="mx-auto max-w-lg py-12 text-center"><p className="text-sm text-slate-400">Start a conversation about a strategy, symbol, timeframe, or backtest constraints.</p></div>}{messages.map((message) => <Message key={message.id} message={message} />)}{sending && <Typing />}<div ref={bottomRef} /></div><form onSubmit={(event) => { event.preventDefault(); send() }} className="border-t border-white/[0.08] bg-slate-950/20 p-4 sm:p-5"><div className="flex items-end gap-3"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send() } }} rows={2} placeholder="Ask about a strategy or start a backtest..." className="min-h-[52px] flex-1 resize-none rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-400/60" /><button type="submit" disabled={sending || !draft.trim()} className="rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Send</button></div><p className="mt-2 text-[11px] text-slate-500">Press Enter to send. Shift+Enter adds a line.</p></form></section></main></div></div>
 }
