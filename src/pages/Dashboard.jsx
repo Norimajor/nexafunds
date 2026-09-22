@@ -10,10 +10,29 @@ const navItems = [
   { label: 'Strategy AI', icon: BrainCircuit },
 ]
 
-const chartPath =
-  'M 15 180 C 70 135, 100 145, 150 120 S 240 70, 290 85 S 360 25, 410 40 S 500 60, 560 32 S 640 18, 700 45 L 700 220 L 15 220 Z'
-
 const API_BASE = 'https://nexafunds-app.onrender.com'
+
+const buildChartGeometry = (points) => {
+  if (!points.length) return null
+
+  const values = points.map((point) => Number(point.equity ?? point.balance ?? 0))
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const spread = max - min || Math.max(Math.abs(max) * 0.01, 1)
+  const top = 18
+  const bottom = 198
+  const left = 15
+  const right = 685
+  const coordinates = values.map((value, index) => {
+    const x = points.length === 1 ? (left + right) / 2 : left + (index / (points.length - 1)) * (right - left)
+    const y = bottom - ((value - min) / spread) * (bottom - top)
+    return [x, y]
+  })
+  const linePath = coordinates.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`).join(' ')
+  const areaPath = `${linePath} L ${coordinates.at(-1)[0].toFixed(2)} ${bottom} L ${coordinates[0][0].toFixed(2)} ${bottom} Z`
+
+  return { linePath, areaPath }
+}
 
 const defaultSettings = {
   ea_name: 'Nexa Gold Scalper',
@@ -41,6 +60,9 @@ export default function Dashboard() {
   const [showSettingsPanel, setShowSettingsPanel] = useState(false)
   const [activeNav, setActiveNav] = useState('Overview')
   const [activeRange, setActiveRange] = useState('3M')
+  const [eaStatus, setEaStatus] = useState({ status: 'OFFLINE', live: false, ea: null })
+  const [journal, setJournal] = useState([])
+  const [performance, setPerformance] = useState([])
 
   const [account, setAccount] = useState({
     currentBalance: 0,
@@ -165,22 +187,46 @@ export default function Dashboard() {
       }
     }
 
+    const fetchLiveTelemetry = async () => {
+      try {
+        const [statusResponse, journalResponse, performanceResponse] = await Promise.all([
+          fetch(`${API_BASE}/api/mt5/status`),
+          fetch(`${API_BASE}/api/mt5/journal?limit=8`),
+          fetch(`${API_BASE}/api/mt5/performance?range=${activeRange}`),
+        ])
+        const [statusData, journalData, performanceData] = await Promise.all([
+          statusResponse.json(),
+          journalResponse.json(),
+          performanceResponse.json(),
+        ])
+        if (cancelled) return
+        if (statusData.success) setEaStatus(statusData)
+        if (journalData.success) setJournal(journalData.events || [])
+        if (performanceData.success) setPerformance(performanceData.points || [])
+      } catch (error) {
+        if (!cancelled) setEaStatus((current) => ({ ...current, status: 'OFFLINE', live: false }))
+        console.error('Failed to fetch MT5 telemetry:', error)
+      }
+    }
+
     fetchUser()
     fetchMt5Data()
     fetchEaSettings()
     fetchTotalUsers()
     fetchEconomicForecasts()
+    fetchLiveTelemetry()
 
     const interval = setInterval(() => {
       fetchMt5Data()
       fetchEconomicForecasts()
+      fetchLiveTelemetry()
     }, 5000)
 
     return () => {
       cancelled = true
       clearInterval(interval)
     }
-  }, [])
+  }, [activeRange])
 
   const money = (value) =>
     `$${Number(value).toLocaleString(undefined, {
@@ -237,11 +283,29 @@ export default function Dashboard() {
     { key: 'fomc', name: 'FOMC', title: 'Federal Funds Rate', description: 'Rate decision', tone: 'emerald', data: economicForecasts?.fomc, valueSuffix: '%' },
   ]
 
-  const activity = [
-    { title: 'MT5 account synced', time: account.updatedAt ? formatDate(account.updatedAt) : 'Waiting for sync', value: mt5Connected ? 'Live' : 'Offline' },
-    { title: 'Floating P/L updated', time: account.updatedAt ? formatDate(account.updatedAt) : 'Waiting for sync', value: money(account.totalProfit) },
-    { title: 'Open positions received', time: account.updatedAt ? formatDate(account.updatedAt) : 'Waiting for sync', value: `${positions.length} open` },
-  ]
+  const chartGeometry = buildChartGeometry(performance)
+
+  const formatJournalEvent = (event) => {
+    const details = [event.symbol, event.side, event.volume != null ? `${event.volume} lots` : null, event.ticket ? `#${event.ticket}` : null]
+      .filter(Boolean)
+      .join(' ')
+    const labels = {
+      EA_CONNECTED: 'EA connected',
+      EA_DISCONNECTED: 'EA disconnected',
+      EA_STATUS_CHANGED: 'EA status changed',
+      POSITION_OPENED: 'Position opened',
+      POSITION_CLOSED: 'Position closed',
+      POSITION_CHANGED: 'Position changed',
+    }
+    const version = event.ea_version ? `EA ${event.ea_version}` : event.ea_name ? `EA ${event.ea_name}` : null
+    return {
+      title: labels[event.event_type] || event.event_type,
+      detail: [details, version, formatDate(event.created_at)].filter(Boolean).join(' · ') || 'MT5 event',
+      value: event.profit == null ? '' : money(event.profit),
+    }
+  }
+
+  const activity = journal.map(formatJournalEvent)
 
   const accessCards = [
     {
@@ -1050,15 +1114,19 @@ const goTo = (labelName) => {
                           strokeDasharray="4 6"
                         />
                       ))}
-                      <path d={chartPath} fill="url(#chartGradient)" opacity="0.28" />
-                      <path
-                        d={chartPath.replace('Z', '')}
-                        fill="none"
-                        stroke="url(#chartStroke)"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
+                      {chartGeometry ? (
+                        <>
+                          <path d={chartGeometry.areaPath} fill="url(#chartGradient)" opacity="0.28" />
+                          <path
+                            d={chartGeometry.linePath}
+                            fill="none"
+                            stroke="url(#chartStroke)"
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </>
+                      ) : null}
                       <defs>
                         <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.85" />
@@ -1070,6 +1138,11 @@ const goTo = (labelName) => {
                         </linearGradient>
                       </defs>
                     </svg>
+                    {!chartGeometry && (
+                      <div className={`absolute inset-0 flex items-center justify-center text-sm ${softText}`}>
+                        No MT5 performance history recorded yet.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1077,9 +1150,10 @@ const goTo = (labelName) => {
               <div className={`${surface} p-5`}>
                 <h3 className="text-lg font-semibold tracking-tight">Recent activity</h3>
                 <div className="mt-5 space-y-1">
-                  {activity.map((item) => (
+                  {activity.length === 0 && <p className={`rounded-2xl px-3 py-3 text-sm ${softText}`}>No MT5 events recorded yet.</p>}
+                  {activity.map((item, index) => (
                     <div
-                      key={item.title}
+                      key={`${item.title}-${index}`}
                       className={[
                         'flex items-start justify-between gap-3 rounded-2xl px-3 py-3 transition-colors duration-200',
                         isDark ? 'hover:bg-white/[0.06] active:bg-sky-500/15' : 'hover:bg-slate-100 active:bg-sky-100',
@@ -1087,9 +1161,9 @@ const goTo = (labelName) => {
                     >
                       <div>
                         <p className="text-sm font-medium">{item.title}</p>
-                        <p className={`text-xs ${softText}`}>{item.time}</p>
+                        <p className={`text-xs ${softText}`}>{item.detail}</p>
                       </div>
-                      <span className={`text-sm font-semibold ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>{item.value}</span>
+                      <span className={`text-right text-xs font-semibold ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>{item.value || 'MT5'}</span>
                     </div>
                   ))}
                 </div>
@@ -1127,10 +1201,10 @@ const goTo = (labelName) => {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className={`text-sm ${softText}`}>Active strategy</p>
-                      <h4 className="mt-1 text-2xl font-bold tracking-tight">{eaSettings.ea_name}</h4>
+                      <h4 className="mt-1 text-2xl font-bold tracking-tight">{eaStatus.ea?.name || 'EA not reported'}</h4>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${tonePill.emerald}`}>
-                      {eaSettings.ea_status}
+                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${eaStatus.live ? tonePill.emerald : 'bg-rose-500/12 text-rose-400 ring-1 ring-inset ring-rose-500/25'}`}>
+                      {eaStatus.live ? 'Live' : 'Offline'}
                     </span>
                   </div>
 

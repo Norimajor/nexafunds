@@ -23,6 +23,8 @@ const DIST_DIR = path.resolve(__dirname, '../dist')
 
 const db = new sqlite3.Database('./database.db')
 const mt5db = new sqlite3.Database('./nexafunds_mt5.db')
+const PERFORMANCE_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000
+const EA_HEARTBEAT_TIMEOUT_MS = 30 * 1000
 
 // ============================================================
 // MIDDLEWARE
@@ -115,6 +117,58 @@ const asyncRoute = (handler) => (req, res) =>
     }
   })
 
+const normalizeStatus = (value) => {
+  const status = String(value || '').trim().toLowerCase()
+  if (['offline', 'disconnected', 'stopped', 'inactive'].includes(status)) return 'OFFLINE'
+  if (['error', 'fault'].includes(status)) return 'ERROR'
+  return 'LIVE'
+}
+
+const readEaTelemetry = (body) => {
+  const telemetry = body?.ea || body?.ea_telemetry || body?.telemetry || {}
+  const name = String(telemetry.name || telemetry.ea_name || body?.ea_name || '').trim()
+  const version = String(telemetry.version || telemetry.ea_version || body?.ea_version || '').trim()
+  const explicitStatus = telemetry.status || telemetry.state || body?.ea_status
+  const heartbeat = telemetry.last_seen || telemetry.heartbeat || telemetry.timestamp || body?.ea_last_seen
+  const parsedHeartbeat = heartbeat ? new Date(heartbeat) : new Date()
+
+  return {
+    provided: Boolean(name || version || explicitStatus || heartbeat),
+    name,
+    version,
+    status: explicitStatus ? normalizeStatus(explicitStatus) : 'LIVE',
+    lastSeen: Number.isNaN(parsedHeartbeat.getTime()) ? new Date().toISOString() : parsedHeartbeat.toISOString(),
+  }
+}
+
+const recordJournalEvent = async (event) => {
+  await run(
+    mt5db,
+    `INSERT OR IGNORE INTO mt5_journal
+      (event_key, event_type, symbol, side, volume, ticket, entry_price, exit_price, profit, ea_name, ea_version, details, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    [
+      event.eventKey,
+      event.eventType,
+      event.symbol || null,
+      event.side || null,
+      event.volume == null ? null : Number(event.volume),
+      event.ticket || null,
+      event.entryPrice == null ? null : Number(event.entryPrice),
+      event.exitPrice == null ? null : Number(event.exitPrice),
+      event.profit == null ? null : Number(event.profit),
+      event.eaName || null,
+      event.eaVersion || null,
+      JSON.stringify(event.details || {}),
+    ]
+  )
+}
+
+const isStaleHeartbeat = (lastSeen) => {
+  const timestamp = new Date(lastSeen).getTime()
+  return !Number.isFinite(timestamp) || Date.now() - timestamp > EA_HEARTBEAT_TIMEOUT_MS
+}
+
 // ============================================================
 // CREATE TABLES
 // ============================================================
@@ -180,6 +234,49 @@ const initDatabases = async () => {
       current_price REAL,
       profit REAL,
       updated_at DATETIME
+    )`
+  )
+
+  await run(
+    mt5db,
+    `CREATE TABLE IF NOT EXISTS mt5_ea_status (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      name TEXT,
+      version TEXT,
+      status TEXT NOT NULL,
+      last_seen DATETIME,
+      updated_at DATETIME NOT NULL
+    )`
+  )
+
+  await run(
+    mt5db,
+    `CREATE TABLE IF NOT EXISTS mt5_journal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_key TEXT UNIQUE NOT NULL,
+      event_type TEXT NOT NULL,
+      symbol TEXT,
+      side TEXT,
+      volume REAL,
+      ticket TEXT,
+      entry_price REAL,
+      exit_price REAL,
+      profit REAL,
+      ea_name TEXT,
+      ea_version TEXT,
+      details TEXT,
+      created_at DATETIME NOT NULL
+    )`
+  )
+
+  await run(
+    mt5db,
+    `CREATE TABLE IF NOT EXISTS mt5_performance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      balance REAL NOT NULL,
+      equity REAL NOT NULL,
+      profit REAL NOT NULL,
+      captured_at DATETIME NOT NULL
     )`
   )
 
@@ -720,6 +817,74 @@ app.get(
   })
 )
 
+app.get(
+  '/api/mt5/status',
+  asyncRoute(async (req, res) => {
+    const status = await get(mt5db, 'SELECT * FROM mt5_ea_status WHERE id = 1')
+    if (!status) {
+      return res.json({ success: true, status: 'OFFLINE', live: false, ea: null })
+    }
+
+    const stale = isStaleHeartbeat(status.last_seen)
+    if (stale && status.status === 'LIVE') {
+      await run(mt5db, "UPDATE mt5_ea_status SET status = 'OFFLINE', updated_at = datetime('now') WHERE id = 1")
+      await recordJournalEvent({
+        eventKey: `ea-disconnected:${status.last_seen}`,
+        eventType: 'EA_DISCONNECTED',
+        eaName: status.name,
+        eaVersion: status.version,
+        details: { reason: 'heartbeat_stale', last_seen: status.last_seen },
+      })
+      status.status = 'OFFLINE'
+    }
+
+    res.json({
+      success: true,
+      status: status.status,
+      live: status.status === 'LIVE' && !stale,
+      ea: {
+        name: status.name || null,
+        version: status.version || null,
+        last_seen: status.last_seen,
+      },
+    })
+  })
+)
+
+app.get(
+  '/api/mt5/journal',
+  asyncRoute(async (req, res) => {
+    const requestedLimit = Number(req.query.limit)
+    const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(1, Math.floor(requestedLimit))) : 20
+    const events = await all(
+      mt5db,
+      `SELECT id, event_type, symbol, side, volume, ticket, entry_price, exit_price,
+              profit, ea_name, ea_version, details, created_at
+       FROM mt5_journal ORDER BY datetime(created_at) DESC, id DESC LIMIT ?`,
+      [limit]
+    )
+    res.json({ success: true, events })
+  })
+)
+
+app.get(
+  '/api/mt5/performance',
+  asyncRoute(async (req, res) => {
+    const range = String(req.query.range || '3M').toUpperCase()
+    const days = range === '1Y' ? 365 : range === '6M' ? 183 : 92
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    const points = await all(
+      mt5db,
+      `SELECT balance, equity, profit, captured_at
+       FROM mt5_performance
+       WHERE datetime(captured_at) >= datetime(?)
+       ORDER BY datetime(captured_at) ASC`,
+      [since]
+    )
+    res.json({ success: true, range, points })
+  })
+)
+
 // Called by the MT5 EA. Protected by a shared secret, not a session.
 app.post(
   '/api/mt5/update',
@@ -737,6 +902,13 @@ app.post(
     }
 
     const safePositions = Array.isArray(positions) ? positions : []
+    const eaTelemetry = readEaTelemetry(req.body)
+    const previousPositions = await all(mt5db, 'SELECT * FROM mt5_positions')
+    const previousEa = await get(mt5db, 'SELECT * FROM mt5_ea_status WHERE id = 1')
+    const latestPerformance = await get(
+      mt5db,
+      'SELECT captured_at FROM mt5_performance ORDER BY datetime(captured_at) DESC LIMIT 1'
+    )
 
     // Wrapped in a transaction so a mid-way failure can't leave the
     // tables empty (the original deleted first, then raced the inserts).
@@ -774,6 +946,108 @@ app.post(
             Number(p.current_price ?? 0),
             Number(p.profit ?? 0),
           ]
+        )
+      }
+
+      if (eaTelemetry.provided) {
+        const eaChanged = !previousEa || previousEa.name !== eaTelemetry.name || previousEa.version !== eaTelemetry.version
+        const statusChanged = !previousEa || previousEa.status !== eaTelemetry.status
+        await run(
+          mt5db,
+          `INSERT INTO mt5_ea_status (id, name, version, status, last_seen, updated_at)
+           VALUES (1, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(id) DO UPDATE SET
+             name = excluded.name,
+             version = excluded.version,
+             status = excluded.status,
+             last_seen = excluded.last_seen,
+             updated_at = excluded.updated_at`,
+          [eaTelemetry.name || previousEa?.name || '', eaTelemetry.version || previousEa?.version || '', eaTelemetry.status, eaTelemetry.lastSeen]
+        )
+
+        if (eaTelemetry.status === 'LIVE' && (eaChanged || statusChanged)) {
+          await recordJournalEvent({
+            eventKey: `ea-connected:${eaTelemetry.name}:${eaTelemetry.version}:${eaTelemetry.lastSeen}`,
+            eventType: previousEa?.status === 'OFFLINE' ? 'EA_CONNECTED' : 'EA_STATUS_CHANGED',
+            eaName: eaTelemetry.name,
+            eaVersion: eaTelemetry.version,
+            details: { status: eaTelemetry.status },
+          })
+        } else if (eaTelemetry.status !== 'LIVE' && statusChanged) {
+          await recordJournalEvent({
+            eventKey: `ea-status:${eaTelemetry.status}:${eaTelemetry.lastSeen}`,
+            eventType: 'EA_STATUS_CHANGED',
+            eaName: eaTelemetry.name,
+            eaVersion: eaTelemetry.version,
+            details: { status: eaTelemetry.status },
+          })
+        }
+      }
+
+      const previousByTicket = new Map(previousPositions.map((position) => [String(position.ticket), position]))
+      const currentByTicket = new Map(safePositions.map((position) => [String(position.ticket), position]))
+      for (const position of safePositions) {
+        const ticket = String(position.ticket ?? '')
+        const previous = previousByTicket.get(ticket)
+        if (!previous) {
+          await recordJournalEvent({
+            eventKey: `position-opened:${ticket}:${Number(position.price_open ?? 0)}`,
+            eventType: 'POSITION_OPENED',
+            symbol: position.symbol,
+            side: position.type,
+            volume: position.volume,
+            ticket,
+            entryPrice: position.price_open,
+            profit: position.profit,
+            eaName: eaTelemetry.name || previousEa?.name,
+            eaVersion: eaTelemetry.version || previousEa?.version,
+          })
+        } else if (
+          String(previous.type) !== String(position.type) ||
+          Number(previous.volume) !== Number(position.volume) ||
+          Number(previous.price_open) !== Number(position.price_open)
+        ) {
+          await recordJournalEvent({
+            eventKey: `position-changed:${ticket}:${position.volume}:${position.price_open}:${position.type}`,
+            eventType: 'POSITION_CHANGED',
+            symbol: position.symbol,
+            side: position.type,
+            volume: position.volume,
+            ticket,
+            entryPrice: position.price_open,
+            profit: position.profit,
+            eaName: eaTelemetry.name || previousEa?.name,
+            eaVersion: eaTelemetry.version || previousEa?.version,
+          })
+        }
+      }
+
+      for (const previous of previousPositions) {
+        const ticket = String(previous.ticket)
+        if (!currentByTicket.has(ticket)) {
+          await recordJournalEvent({
+            eventKey: `position-closed:${ticket}:${previous.updated_at}`,
+            eventType: 'POSITION_CLOSED',
+            symbol: previous.symbol,
+            side: previous.type,
+            volume: previous.volume,
+            ticket,
+            entryPrice: previous.price_open,
+            exitPrice: previous.current_price,
+            profit: previous.profit,
+            eaName: eaTelemetry.name || previousEa?.name,
+            eaVersion: eaTelemetry.version || previousEa?.version,
+          })
+        }
+      }
+
+      const lastSnapshotTime = latestPerformance ? new Date(String(latestPerformance.captured_at).replace(' ', 'T') + 'Z').getTime() : 0
+      if (!lastSnapshotTime || Date.now() - lastSnapshotTime >= PERFORMANCE_SNAPSHOT_INTERVAL_MS) {
+        await run(
+          mt5db,
+          `INSERT INTO mt5_performance (balance, equity, profit, captured_at)
+           VALUES (?, ?, ?, datetime('now'))`,
+          [Number(account.balance ?? 0), Number(account.equity ?? 0), Number(account.profit ?? 0)]
         )
       }
 
