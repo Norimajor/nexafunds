@@ -47,8 +47,10 @@ export default function Dashboard() {
     totalProfit: 0,
     portfolioValue: 0,
     totalInvested: 0,
-    monthlyGain: 0,
-    totalReturn: 0,
+    margin: 0,
+    freeMargin: 0,
+    updatedAt: null,
+    login: '',
   })
 
   const [eaSettings, setEaSettings] = useState(defaultSettings)
@@ -66,6 +68,8 @@ export default function Dashboard() {
     openPositions: 0,
     todayProfit: 0,
   })
+
+  const [mt5Connected, setMt5Connected] = useState(false)
 
   useEffect(() => {
     document.documentElement.style.colorScheme = theme
@@ -85,13 +89,22 @@ export default function Dashboard() {
       }
     }
 
-    const fetchAccount = async () => {
+    const fetchMt5Data = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/mt5/account`)
-        const data = await response.json()
-        if (cancelled || !data.success) return
+        const [accountResponse, positionsResponse] = await Promise.all([
+          fetch(`${API_BASE}/api/mt5/account`),
+          fetch(`${API_BASE}/api/mt5/positions`),
+        ])
+        const accountData = await accountResponse.json()
+        const positionsData = await positionsResponse.json()
+        if (cancelled) return
 
-        const mt5 = data.account
+        const mt5 = accountData.success ? accountData.account : null
+        const nextPositions = positionsData.success ? positionsData.positions || [] : []
+        setPositions(nextPositions)
+        setMt5Connected(Boolean(mt5 && positionsData.success))
+        if (!mt5) return
+
         const balance = Number(mt5.balance) || 0
         const equity = Number(mt5.equity) || 0
         const profit = Number(mt5.profit) || 0
@@ -101,32 +114,20 @@ export default function Dashboard() {
           totalProfit: profit,
           portfolioValue: equity,
           totalInvested: balance,
-          monthlyGain: 12.5,
-          totalReturn: balance > 0 ? ((equity - balance) / balance) * 100 : 0,
+          margin: Number(mt5.margin) || 0,
+          freeMargin: Number(mt5.free_margin) || 0,
+          updatedAt: mt5.updated_at,
+          login: mt5.login || '',
         })
 
-        setEaStats({
-          activeStrategy: mt5.server || 'MT5 Live Engine',
-          riskProfile:
-            balance > 0 && ((equity - balance) / balance) * 100 > 10 ? 'Moderate' : 'Conservative',
-          maxDrawdown: Math.max(0, balance - equity),
-          autoTrading: true,
-          openPositions: positions.length,
+        setEaStats((current) => ({
+          ...current,
+          openPositions: nextPositions.length,
           todayProfit: profit,
-        })
+        }))
       } catch (error) {
-        console.error('Failed to fetch MT5 account:', error)
-      }
-    }
-
-    const fetchPositions = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/mt5/positions`)
-        const data = await response.json()
-        if (cancelled || !data.success) return
-        setPositions(data.positions || [])
-      } catch (error) {
-        console.error('Failed to fetch MT5 positions:', error)
+        if (!cancelled) setMt5Connected(false)
+        console.error('Failed to fetch MT5 data:', error)
       }
     }
 
@@ -165,15 +166,13 @@ export default function Dashboard() {
     }
 
     fetchUser()
-    fetchAccount()
-    fetchPositions()
+    fetchMt5Data()
     fetchEaSettings()
     fetchTotalUsers()
     fetchEconomicForecasts()
 
     const interval = setInterval(() => {
-      fetchAccount()
-      fetchPositions()
+      fetchMt5Data()
       fetchEconomicForecasts()
     }, 5000)
 
@@ -190,10 +189,10 @@ export default function Dashboard() {
     })}`
 
   const stats = [
-    { label: 'Current balance', value: money(account.currentBalance), change: '+8.4%', tone: 'emerald' },
-    { label: 'Net profit', value: money(account.totalProfit), change: '+12.6%', tone: 'blue' },
-    { label: 'Portfolio value', value: money(account.portfolioValue), change: 'Live', tone: 'violet' },
-    { label: 'Invested capital', value: money(account.totalInvested), change: 'Stable', tone: 'amber' },
+    { label: 'Current balance', value: money(account.currentBalance), change: mt5Connected ? 'Live' : 'Offline', tone: 'emerald' },
+    { label: 'Floating P/L', value: money(account.totalProfit), change: 'MT5', tone: account.totalProfit >= 0 ? 'blue' : 'amber' },
+    { label: 'Portfolio value', value: money(account.portfolioValue), change: 'Equity', tone: 'violet' },
+    { label: 'Free margin', value: money(account.freeMargin), change: 'Available', tone: 'amber' },
   ]
 
   const formatDate = (value) => {
@@ -239,9 +238,9 @@ export default function Dashboard() {
   ]
 
   const activity = [
-    { title: 'MT5 account synced', time: 'Just now', value: 'Live' },
-    { title: 'EA performance updated', time: '1 day ago', value: '+$1,240' },
-    { title: 'Broker account verified', time: '2 days ago', value: 'OK' },
+    { title: 'MT5 account synced', time: account.updatedAt ? formatDate(account.updatedAt) : 'Waiting for sync', value: mt5Connected ? 'Live' : 'Offline' },
+    { title: 'Floating P/L updated', time: account.updatedAt ? formatDate(account.updatedAt) : 'Waiting for sync', value: money(account.totalProfit) },
+    { title: 'Open positions received', time: account.updatedAt ? formatDate(account.updatedAt) : 'Waiting for sync', value: `${positions.length} open` },
   ]
 
   const accessCards = [
@@ -746,7 +745,9 @@ const goTo = (labelName) => {
                     <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
                       MT5 Live Overview
                     </p>
-                    <h3 className="mt-4 text-3xl font-bold tracking-tight">Active MT5 account synced successfully</h3>
+                    <h3 className="mt-4 text-3xl font-bold tracking-tight">
+                      {mt5Connected ? 'Active MT5 account synced successfully' : 'Waiting for MT5 account sync'}
+                    </h3>
                     <p className={`mt-3 max-w-lg text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       Balance, equity, floating profit, and open positions are updating automatically every 5 seconds from
                       the currently logged-in MT5 account.
@@ -755,15 +756,10 @@ const goTo = (labelName) => {
 
                   <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-5 py-4 text-right shadow-[0_18px_40px_-24px_rgba(16,185,129,0.9)]">
                     <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
-                      Total Return
+                      Last sync
                     </p>
-                    <h4
-                      className={`mt-2 text-3xl font-bold tabular-nums ${
-                        account.totalReturn >= 0 ? 'text-emerald-500' : 'text-rose-400'
-                      }`}
-                    >
-                      {account.totalReturn >= 0 ? '+' : ''}
-                      {account.totalReturn.toFixed(2)}%
+                    <h4 className="mt-2 text-lg font-bold tabular-nums text-emerald-500">
+                      {account.updatedAt ? formatDate(account.updatedAt) : 'Not available'}
                     </h4>
                   </div>
                 </div>
@@ -1144,8 +1140,8 @@ const goTo = (labelName) => {
                       <span className="font-semibold text-amber-500">{eaSettings.ea_risk}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className={softText}>Max drawdown</span>
-                      <span className="font-semibold tabular-nums">{eaSettings.ea_drawdown}%</span>
+                      <span className={softText}>Open positions</span>
+                      <span className="font-semibold tabular-nums">{eaStats.openPositions}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className={softText}>Auto trading</span>
@@ -1162,8 +1158,8 @@ const goTo = (labelName) => {
                 <div className="mt-5 space-y-4">
                   {[
                     { k: 'Registered investors', v: totalUsers, cls: 'text-blue-500' },
-                    { k: 'Monthly gain', v: `+${account.monthlyGain || 12.5}%`, cls: 'text-emerald-500' },
-                    { k: 'All-time return', v: '+48.7%', cls: 'text-emerald-500' },
+                    { k: 'MT5 account', v: account.login || 'Not synced', cls: 'text-sky-500' },
+                    { k: 'Margin used', v: money(account.margin), cls: 'text-amber-500' },
                   ].map((row) => (
                     <div
                       key={row.k}
