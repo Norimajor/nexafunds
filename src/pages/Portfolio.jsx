@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const API_BASE = 'https://nexafunds.onrender.com'
+const API_BASE = 'https://nexafunds-app.onrender.com'
 
 export default function Portfolio() {
   const [account, setAccount] = useState({

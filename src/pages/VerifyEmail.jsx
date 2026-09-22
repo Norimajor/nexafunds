@@ -22,7 +22,7 @@ export default function VerifyEmail() {
 
     try {
       const response = await fetch(
-        'https://nexafunds.onrender.com/api/send-code',
+        'https://nexafunds-app.onrender.com/api/send-code',
         {
           method: 'POST',
           headers: {
@@ -58,7 +58,7 @@ export default function VerifyEmail() {
 
     try {
       const verifyResponse = await fetch(
-        'https://nexafunds.onrender.com/api/verify-code',
+        'https://nexafunds-app.onrender.com/api/verify-code',
         {
           method: 'POST',
           headers: {
@@ -79,7 +79,7 @@ export default function VerifyEmail() {
       }
 
       const registerResponse = await fetch(
-        'https://nexafunds.onrender.com/api/register',
+        'https://nexafunds-app.onrender.com/api/register',
         {
           method: 'POST',
           headers: {

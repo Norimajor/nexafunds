@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, BrainCircuit, ChartPie, CheckCheck, ChevronRight, House, Menu, Moon, Paperclip, Send, Sun } from 'lucide-react'
 
 const API_BASE = (import.meta.env.VITE_NEXA_AI_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-const USER_API_BASE = 'https://nexafunds.onrender.com'
+const USER_API_BASE = 'https://nexafunds-app.onrender.com'
 const ANONYMOUS_ID_KEY = 'nexafunds-ai-user-id'
 const CONVERSATION_KEY = 'nexafunds-ai-conversation'
 const makeId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`

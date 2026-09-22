@@ -5,7 +5,7 @@ import countryList from 'react-select-country-list'
 import ReactCountryFlag from 'react-country-flag'
 import { NEXAFUNDS_IMAGES } from '../config/images'
 
-const API_URL = 'https://nexafunds.onrender.com'
+const API_URL = 'https://nexafunds-app.onrender.com'
 
 export default function Register() {
   const navigate = useNavigate()

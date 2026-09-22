@@ -13,7 +13,7 @@ const navItems = [
 const chartPath =
   'M 15 180 C 70 135, 100 145, 150 120 S 240 70, 290 85 S 360 25, 410 40 S 500 60, 560 32 S 640 18, 700 45 L 700 220 L 15 220 Z'
 
-const API_BASE = 'https://nexafunds.onrender.com'
+const API_BASE = 'https://nexafunds-app.onrender.com'
 
 const defaultSettings = {
   ea_name: 'Nexa Gold Scalper',
