@@ -18,22 +18,31 @@ export default function Login() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           email,
           password,
         }),
       })
 
-      const data = await response.json()
+      let data
+      try {
+        data = await response.json()
+      } catch {
+        alert('The server returned an invalid response. Please try again.')
+        return
+      }
 
-      if (data.success) {
+      if (response.ok && data.success) {
         localStorage.setItem('nexafunds_user', JSON.stringify(data.user))
         alert(`Welcome back ${data.user.first_name}!`)
         navigate('/dashboard')
-      } else {
+      } else if (data.error) {
         alert(data.error)
+      } else {
+        alert('The server could not complete your login request. Please try again.')
       }
-    } catch (err) {
+    } catch {
       alert('Unable to connect to server')
     } finally {
       setLoading(false)
