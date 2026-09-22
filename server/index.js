@@ -121,22 +121,29 @@ const normalizeStatus = (value) => {
   const status = String(value || '').trim().toLowerCase()
   if (['offline', 'disconnected', 'stopped', 'inactive'].includes(status)) return 'OFFLINE'
   if (['error', 'fault'].includes(status)) return 'ERROR'
+  if (['unknown', 'missing', 'unavailable'].includes(status)) return 'UNKNOWN'
   return 'LIVE'
 }
 
-const readEaTelemetry = (body) => {
+const readEaTelemetry = (body, accountLogin) => {
   const telemetry = body?.ea || body?.ea_telemetry || body?.telemetry || {}
-  const name = String(telemetry.name || telemetry.ea_name || body?.ea_name || '').trim()
-  const version = String(telemetry.version || telemetry.ea_version || body?.ea_version || '').trim()
-  const explicitStatus = telemetry.status || telemetry.state || body?.ea_status
-  const heartbeat = telemetry.last_seen || telemetry.heartbeat || telemetry.timestamp || body?.ea_last_seen
-  const parsedHeartbeat = heartbeat ? new Date(heartbeat) : new Date()
+  const instances = Array.isArray(telemetry.instances) ? telemetry.instances : [telemetry]
+  const instance = instances.find((candidate) => String(candidate?.account_login || '') === String(accountLogin)) || instances[0] || {}
+  const name = String(instance.name || instance.ea_name || telemetry.name || telemetry.ea_name || body?.ea_name || '').trim()
+  const version = String(instance.version || instance.ea_version || telemetry.version || telemetry.ea_version || body?.ea_version || '').trim()
+  const explicitStatus = instance.status || instance.state || telemetry.status || telemetry.state || body?.ea_status
+  const heartbeat = instance.last_heartbeat || instance.last_seen || instance.heartbeat || instance.timestamp || telemetry.last_seen || telemetry.heartbeat || telemetry.timestamp || body?.ea_last_seen
+  const normalizedHeartbeat = String(heartbeat || '').replace(
+    /^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2}:\d{2})$/,
+    '$1-$2-$3T$4Z'
+  )
+  const parsedHeartbeat = heartbeat ? new Date(normalizedHeartbeat) : new Date()
 
   return {
     provided: Boolean(name || version || explicitStatus || heartbeat),
     name,
     version,
-    status: explicitStatus ? normalizeStatus(explicitStatus) : 'LIVE',
+    status: explicitStatus ? normalizeStatus(explicitStatus) : name ? 'LIVE' : 'UNKNOWN',
     lastSeen: Number.isNaN(parsedHeartbeat.getTime()) ? new Date().toISOString() : parsedHeartbeat.toISOString(),
   }
 }
@@ -165,7 +172,11 @@ const recordJournalEvent = async (event) => {
 }
 
 const isStaleHeartbeat = (lastSeen) => {
-  const timestamp = new Date(lastSeen).getTime()
+  const normalized = String(lastSeen || '').replace(
+    /^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2}:\d{2})$/,
+    '$1-$2-$3T$4Z'
+  )
+  const timestamp = new Date(normalized).getTime()
   return !Number.isFinite(timestamp) || Date.now() - timestamp > EA_HEARTBEAT_TIMEOUT_MS
 }
 
@@ -868,6 +879,98 @@ app.get(
 )
 
 app.get(
+  '/api/mt5/journal/daily',
+  asyncRoute(async (req, res) => {
+    const range = String(req.query.range || '3M').toUpperCase()
+    const days = range === '1Y' ? 365 : range === '6M' ? 183 : 92
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    const snapshots = await all(
+      mt5db,
+      `SELECT balance, equity, profit, captured_at
+       FROM mt5_performance
+       WHERE datetime(captured_at) >= datetime(?)
+       ORDER BY datetime(captured_at) ASC`,
+      [since]
+    )
+    const events = await all(
+      mt5db,
+      `SELECT event_type, symbol, side, volume, ticket, entry_price, exit_price, profit,
+              ea_name, ea_version, created_at
+       FROM mt5_journal
+       WHERE datetime(created_at) >= datetime(?)
+       ORDER BY datetime(created_at) ASC, id ASC`,
+      [since]
+    )
+    const daily = new Map()
+    const ensureDay = (date) => {
+      if (!daily.has(date)) {
+        daily.set(date, {
+          date,
+          balance: null,
+          equity: null,
+          equity_change: null,
+          snapshots: 0,
+          trades: 0,
+          opened: 0,
+          closed: 0,
+          closed_profit: 0,
+          events: [],
+        })
+      }
+      return daily.get(date)
+    }
+
+    for (const snapshot of snapshots) {
+      const date = String(snapshot.captured_at).slice(0, 10)
+      const day = ensureDay(date)
+      if (day.equity == null) day.equity = Number(snapshot.equity)
+      day.balance = Number(snapshot.balance)
+      day.equity = Number(snapshot.equity)
+      day.snapshots += 1
+    }
+
+    for (const event of events) {
+      const date = String(event.created_at).slice(0, 10)
+      const day = ensureDay(date)
+      const isOpened = event.event_type === 'POSITION_OPENED'
+      const isClosed = event.event_type === 'POSITION_CLOSED'
+      if (isOpened || isClosed) {
+        day.trades += 1
+        if (isOpened) day.opened += 1
+        if (isClosed) {
+          day.closed += 1
+          day.closed_profit += Number(event.profit || 0)
+        }
+      }
+      day.events.push({
+        event_type: event.event_type,
+        symbol: event.symbol,
+        side: event.side,
+        volume: event.volume,
+        ticket: event.ticket,
+        entry_price: event.entry_price,
+        exit_price: event.exit_price,
+        profit: event.profit,
+        ea_name: event.ea_name,
+        ea_version: event.ea_version,
+        created_at: event.created_at,
+      })
+    }
+
+    const orderedDays = [...daily.values()].sort((left, right) => left.date.localeCompare(right.date))
+    for (let index = 1; index < orderedDays.length; index += 1) {
+      const previous = orderedDays[index - 1]
+      const current = orderedDays[index]
+      if (previous.equity != null && current.equity != null) {
+        current.equity_change = current.equity - previous.equity
+      }
+    }
+
+    res.json({ success: true, range, days: orderedDays })
+  })
+)
+
+app.get(
   '/api/mt5/performance',
   asyncRoute(async (req, res) => {
     const range = String(req.query.range || '3M').toUpperCase()
@@ -902,7 +1005,7 @@ app.post(
     }
 
     const safePositions = Array.isArray(positions) ? positions : []
-    const eaTelemetry = readEaTelemetry(req.body)
+    const eaTelemetry = readEaTelemetry(req.body, account.login)
     const previousPositions = await all(mt5db, 'SELECT * FROM mt5_positions')
     const previousEa = await get(mt5db, 'SELECT * FROM mt5_ea_status WHERE id = 1')
     const latestPerformance = await get(

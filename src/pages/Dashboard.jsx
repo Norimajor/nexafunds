@@ -62,6 +62,7 @@ export default function Dashboard() {
   const [activeRange, setActiveRange] = useState('3M')
   const [eaStatus, setEaStatus] = useState({ status: 'OFFLINE', live: false, ea: null })
   const [journal, setJournal] = useState([])
+  const [dailyJournal, setDailyJournal] = useState([])
   const [performance, setPerformance] = useState([])
 
   const [account, setAccount] = useState({
@@ -194,15 +195,18 @@ export default function Dashboard() {
           fetch(`${API_BASE}/api/mt5/journal?limit=8`),
           fetch(`${API_BASE}/api/mt5/performance?range=${activeRange}`),
         ])
+        const dailyResponse = await fetch(`${API_BASE}/api/mt5/journal/daily?range=${activeRange}`)
         const [statusData, journalData, performanceData] = await Promise.all([
           statusResponse.json(),
           journalResponse.json(),
           performanceResponse.json(),
         ])
+        const dailyData = await dailyResponse.json()
         if (cancelled) return
         if (statusData.success) setEaStatus(statusData)
         if (journalData.success) setJournal(journalData.events || [])
         if (performanceData.success) setPerformance(performanceData.points || [])
+        if (dailyData.success) setDailyJournal(dailyData.days || [])
       } catch (error) {
         if (!cancelled) setEaStatus((current) => ({ ...current, status: 'OFFLINE', live: false }))
         console.error('Failed to fetch MT5 telemetry:', error)
@@ -1168,6 +1172,58 @@ const goTo = (labelName) => {
                   ))}
                 </div>
               </div>
+            </section>
+
+            {/* EA performance journal */}
+            <section className={`${surface} p-5`}>
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-semibold tracking-tight">EA performance journal</h3>
+                  <p className={`text-sm ${softText}`}>Recorded MT5 performance and trading events</p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-medium ${tonePill.sky}`}>
+                  {dailyJournal.length} recorded days
+                </span>
+              </div>
+
+              {dailyJournal.length === 0 ? (
+                <div className={`rounded-2xl border border-dashed p-8 text-center text-sm ${isDark ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
+                  No real MT5 performance history has been recorded yet.
+                </div>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                  {dailyJournal.map((day) => {
+                    const equityChange = Number(day.equity_change)
+                    const closedProfit = Number(day.closed_profit || 0)
+                    const dayTone = closedProfit > 0 || equityChange > 0
+                      ? 'border-emerald-500/30 bg-emerald-500/10'
+                      : closedProfit < 0 || equityChange < 0
+                        ? 'border-rose-500/30 bg-rose-500/10'
+                        : isDark
+                          ? 'border-white/10 bg-white/[0.04]'
+                          : 'border-slate-200 bg-slate-50'
+                    return (
+                      <div key={day.date} className={`min-h-32 rounded-2xl border p-3 ${dayTone}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">{day.date}</p>
+                          <span className={`text-[10px] uppercase tracking-[0.12em] ${softText}`}>{day.snapshots} snap</span>
+                        </div>
+                        <p className={`mt-3 text-lg font-bold tabular-nums ${day.equity == null ? softText : ''}`}>
+                          {day.equity == null ? 'No equity' : money(day.equity)}
+                        </p>
+                        <p className={`mt-1 text-xs ${softText}`}>
+                          {day.trades ? `${day.trades} trade event${day.trades === 1 ? '' : 's'}` : 'No trade events'}
+                        </p>
+                        {day.trades > 0 && (
+                          <p className={`mt-2 text-xs font-semibold ${closedProfit >= 0 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                            Closed P/L {money(closedProfit)}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </section>
 
             {/* EA + account status */}
