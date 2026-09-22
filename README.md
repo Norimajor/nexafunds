@@ -7,6 +7,10 @@ The NexaFunds backend proxies the live NFP forecast from the USDNewsAI service a
 USDNewsAI API before starting the backend. For local development, the default is
 `http://127.0.0.1:8000`.
 
+The dashboard also proxies the live CPI, PPI, and FOMC forecasts from the same
+service at `GET /api/economic/latest`. Missing upstream prediction files are
+returned as unavailable data; the dashboard does not fall back to hardcoded values.
+
 Optional timeout configuration:
 
 ```env

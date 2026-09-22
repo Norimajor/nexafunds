@@ -370,6 +370,47 @@ const fetchLatestNfp = async () => {
   }
 }
 
+const fetchLatestEconomic = async (event) => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), USDNEWS_AI_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(`${USDNEWS_AI_API_URL}/api/${event}/latest`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    })
+    const data = await response.json().catch(() => null)
+
+    if (!response.ok || !data || data.error) {
+      const detail = data?.error || `USDNewsAI returned HTTP ${response.status}`
+      const error = new Error(detail)
+      error.status = response.ok ? 502 : response.status
+      throw error
+    }
+
+    return data
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const normalizeEconomicForecast = (data, event) => {
+  if (!data) return null
+
+  const prediction = data.prediction ?? data[`${event}_prediction`] ?? data.forecast
+  const consensus = data.consensus ?? data[`${event}_consensus`]
+  const surprise = data.surprise ?? data.expected_surprise
+  const direction = data.direction ?? data.surprise_direction ?? 'Neutral'
+
+  return {
+    ...data,
+    prediction,
+    consensus,
+    expected_surprise: surprise,
+    direction,
+  }
+}
+
 // ------------------------------------------------------------
 // Latest NFP endpoint
 // ------------------------------------------------------------
@@ -409,32 +450,23 @@ app.get('/api/nfp', async (req, res) => {
   }
 })
 
-const ECONOMIC_DATA = {
-  cpi: {
-    prediction: 2.8,
-    consensus: 2.7,
-    expected_surprise: 0.1,
-    direction: 'Bearish',
-    forecast_release_date: '2026-09-11',
-  },
-  ppi: {
-    prediction: 3.1,
-    consensus: 3.0,
-    expected_surprise: 0.1,
-    direction: 'Bearish',
-    forecast_release_date: '2026-09-10',
-  },
-  fomc: {
-    prediction: 4.25,
-    consensus: 4.25,
-    expected_surprise: 0,
-    direction: 'Neutral',
-    forecast_release_date: '2026-09-16',
-  },
-}
+app.get('/api/economic/latest', async (req, res) => {
+  const events = ['cpi', 'ppi', 'fomc']
+  const results = await Promise.allSettled(events.map((event) => fetchLatestEconomic(event)))
+  const forecasts = Object.fromEntries(
+    events.map((event, index) => [
+      event,
+      results[index].status === 'fulfilled' ? normalizeEconomicForecast(results[index].value, event) : null,
+    ])
+  )
 
-app.get('/api/economic/latest', (req, res) => {
-  res.json({ success: true, forecasts: ECONOMIC_DATA })
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error(`USDNewsAI ${events[index].toUpperCase()} request failed:`, result.reason)
+    }
+  })
+
+  res.json({ success: true, forecasts })
 })
 
 // ---------------- REGISTER ----------------
