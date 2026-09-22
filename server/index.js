@@ -152,10 +152,11 @@ const recordJournalEvent = async (event) => {
   await run(
     mt5db,
     `INSERT OR IGNORE INTO mt5_journal
-      (event_key, event_type, symbol, side, volume, ticket, entry_price, exit_price, profit, ea_name, ea_version, details, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      (event_key, account_login, event_type, symbol, side, volume, ticket, entry_price, exit_price, profit, ea_name, ea_version, details, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     [
-      event.eventKey,
+      `${event.accountLogin || 'unknown'}:${event.eventKey}`,
+      event.accountLogin || null,
       event.eventType,
       event.symbol || null,
       event.side || null,
@@ -252,6 +253,7 @@ const initDatabases = async () => {
     mt5db,
     `CREATE TABLE IF NOT EXISTS mt5_ea_status (
       id INTEGER PRIMARY KEY CHECK (id = 1),
+      account_login TEXT,
       name TEXT,
       version TEXT,
       status TEXT NOT NULL,
@@ -260,11 +262,17 @@ const initDatabases = async () => {
     )`
   )
 
+  const eaStatusColumns = await all(mt5db, 'PRAGMA table_info(mt5_ea_status)')
+  if (!eaStatusColumns.some((column) => column.name === 'account_login')) {
+    await run(mt5db, 'ALTER TABLE mt5_ea_status ADD COLUMN account_login TEXT')
+  }
+
   await run(
     mt5db,
     `CREATE TABLE IF NOT EXISTS mt5_journal (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       event_key TEXT UNIQUE NOT NULL,
+      account_login TEXT,
       event_type TEXT NOT NULL,
       symbol TEXT,
       side TEXT,
@@ -284,12 +292,22 @@ const initDatabases = async () => {
     mt5db,
     `CREATE TABLE IF NOT EXISTS mt5_performance (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_login TEXT,
       balance REAL NOT NULL,
       equity REAL NOT NULL,
       profit REAL NOT NULL,
       captured_at DATETIME NOT NULL
     )`
   )
+
+  const journalColumns = await all(mt5db, 'PRAGMA table_info(mt5_journal)')
+  if (!journalColumns.some((column) => column.name === 'account_login')) {
+    await run(mt5db, 'ALTER TABLE mt5_journal ADD COLUMN account_login TEXT')
+  }
+  const performanceColumns = await all(mt5db, 'PRAGMA table_info(mt5_performance)')
+  if (!performanceColumns.some((column) => column.name === 'account_login')) {
+    await run(mt5db, 'ALTER TABLE mt5_performance ADD COLUMN account_login TEXT')
+  }
 
   const defaultEntries = [
     ['current_balance', '6000'],
@@ -831,8 +849,10 @@ app.get(
 app.get(
   '/api/mt5/status',
   asyncRoute(async (req, res) => {
-    const status = await get(mt5db, 'SELECT * FROM mt5_ea_status WHERE id = 1')
-    if (!status) {
+    const account = await get(mt5db, 'SELECT login FROM mt5_account ORDER BY datetime(updated_at) DESC LIMIT 1')
+    const accountLogin = String(account?.login || '')
+    const status = await get(mt5db, 'SELECT * FROM mt5_ea_status WHERE id = 1 AND account_login = ?', [accountLogin])
+    if (!status || !accountLogin) {
       return res.json({ success: true, status: 'OFFLINE', live: false, ea: null })
     }
 
@@ -842,6 +862,7 @@ app.get(
       await recordJournalEvent({
         eventKey: `ea-disconnected:${status.last_seen}`,
         eventType: 'EA_DISCONNECTED',
+        accountLogin,
         eaName: status.name,
         eaVersion: status.version,
         details: { reason: 'heartbeat_stale', last_seen: status.last_seen },
@@ -865,14 +886,17 @@ app.get(
 app.get(
   '/api/mt5/journal',
   asyncRoute(async (req, res) => {
+    const account = await get(mt5db, 'SELECT login FROM mt5_account ORDER BY datetime(updated_at) DESC LIMIT 1')
+    const accountLogin = String(account?.login || '')
     const requestedLimit = Number(req.query.limit)
     const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(1, Math.floor(requestedLimit))) : 20
     const events = await all(
       mt5db,
       `SELECT id, event_type, symbol, side, volume, ticket, entry_price, exit_price,
               profit, ea_name, ea_version, details, created_at
-       FROM mt5_journal ORDER BY datetime(created_at) DESC, id DESC LIMIT ?`,
-      [limit]
+       FROM mt5_journal WHERE account_login = ?
+       ORDER BY datetime(created_at) DESC, id DESC LIMIT ?`,
+      [accountLogin, limit]
     )
     res.json({ success: true, events })
   })
@@ -881,25 +905,27 @@ app.get(
 app.get(
   '/api/mt5/journal/daily',
   asyncRoute(async (req, res) => {
+    const account = await get(mt5db, 'SELECT login FROM mt5_account ORDER BY datetime(updated_at) DESC LIMIT 1')
+    const accountLogin = String(account?.login || '')
     const range = String(req.query.range || '3M').toUpperCase()
     const days = range === '1Y' ? 365 : range === '6M' ? 183 : 92
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
     const snapshots = await all(
       mt5db,
       `SELECT balance, equity, profit, captured_at
-       FROM mt5_performance
-       WHERE datetime(captured_at) >= datetime(?)
+      FROM mt5_performance
+      WHERE account_login = ? AND datetime(captured_at) >= datetime(?)
        ORDER BY datetime(captured_at) ASC`,
-      [since]
+      [accountLogin, since]
     )
     const events = await all(
       mt5db,
       `SELECT event_type, symbol, side, volume, ticket, entry_price, exit_price, profit,
               ea_name, ea_version, created_at
-       FROM mt5_journal
-       WHERE datetime(created_at) >= datetime(?)
+      FROM mt5_journal
+      WHERE account_login = ? AND datetime(created_at) >= datetime(?)
        ORDER BY datetime(created_at) ASC, id ASC`,
-      [since]
+      [accountLogin, since]
     )
     const daily = new Map()
     const ensureDay = (date) => {
@@ -973,16 +999,18 @@ app.get(
 app.get(
   '/api/mt5/performance',
   asyncRoute(async (req, res) => {
+    const account = await get(mt5db, 'SELECT login FROM mt5_account ORDER BY datetime(updated_at) DESC LIMIT 1')
+    const accountLogin = String(account?.login || '')
     const range = String(req.query.range || '3M').toUpperCase()
     const days = range === '1Y' ? 365 : range === '6M' ? 183 : 92
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
     const points = await all(
       mt5db,
       `SELECT balance, equity, profit, captured_at
-       FROM mt5_performance
-       WHERE datetime(captured_at) >= datetime(?)
+      FROM mt5_performance
+      WHERE account_login = ? AND datetime(captured_at) >= datetime(?)
        ORDER BY datetime(captured_at) ASC`,
-      [since]
+      [accountLogin, since]
     )
     res.json({ success: true, range, points })
   })
@@ -1005,13 +1033,18 @@ app.post(
     }
 
     const safePositions = Array.isArray(positions) ? positions : []
-    const eaTelemetry = readEaTelemetry(req.body, account.login)
-    const previousPositions = await all(mt5db, 'SELECT * FROM mt5_positions')
-    const previousEa = await get(mt5db, 'SELECT * FROM mt5_ea_status WHERE id = 1')
+    const accountLogin = String(account.login ?? '')
+    const eaTelemetry = readEaTelemetry(req.body, accountLogin)
+    const previousAccount = await get(mt5db, 'SELECT login FROM mt5_account ORDER BY datetime(updated_at) DESC LIMIT 1')
+    const sameAccount = String(previousAccount?.login || '') === accountLogin
+    const previousPositions = sameAccount ? await all(mt5db, 'SELECT * FROM mt5_positions') : []
+    const previousEa = sameAccount ? await get(mt5db, 'SELECT * FROM mt5_ea_status WHERE id = 1') : null
     const latestPerformance = await get(
       mt5db,
-      'SELECT captured_at FROM mt5_performance ORDER BY datetime(captured_at) DESC LIMIT 1'
+      'SELECT captured_at FROM mt5_performance WHERE account_login = ? ORDER BY datetime(captured_at) DESC LIMIT 1',
+      [accountLogin]
     )
+    const recordCurrentJournalEvent = (event) => recordJournalEvent({ ...event, accountLogin })
 
     // Wrapped in a transaction so a mid-way failure can't leave the
     // tables empty (the original deleted first, then raced the inserts).
@@ -1057,19 +1090,20 @@ app.post(
         const statusChanged = !previousEa || previousEa.status !== eaTelemetry.status
         await run(
           mt5db,
-          `INSERT INTO mt5_ea_status (id, name, version, status, last_seen, updated_at)
-           VALUES (1, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO mt5_ea_status (id, account_login, name, version, status, last_seen, updated_at)
+           VALUES (1, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(id) DO UPDATE SET
+             account_login = excluded.account_login,
              name = excluded.name,
              version = excluded.version,
              status = excluded.status,
              last_seen = excluded.last_seen,
              updated_at = excluded.updated_at`,
-          [eaTelemetry.name || previousEa?.name || '', eaTelemetry.version || previousEa?.version || '', eaTelemetry.status, eaTelemetry.lastSeen]
+          [accountLogin, eaTelemetry.name || previousEa?.name || '', eaTelemetry.version || previousEa?.version || '', eaTelemetry.status, eaTelemetry.lastSeen]
         )
 
         if (eaTelemetry.status === 'LIVE' && (eaChanged || statusChanged)) {
-          await recordJournalEvent({
+          await recordCurrentJournalEvent({
             eventKey: `ea-connected:${eaTelemetry.name}:${eaTelemetry.version}:${eaTelemetry.lastSeen}`,
             eventType: previousEa?.status === 'OFFLINE' ? 'EA_CONNECTED' : 'EA_STATUS_CHANGED',
             eaName: eaTelemetry.name,
@@ -1077,7 +1111,7 @@ app.post(
             details: { status: eaTelemetry.status },
           })
         } else if (eaTelemetry.status !== 'LIVE' && statusChanged) {
-          await recordJournalEvent({
+          await recordCurrentJournalEvent({
             eventKey: `ea-status:${eaTelemetry.status}:${eaTelemetry.lastSeen}`,
             eventType: 'EA_STATUS_CHANGED',
             eaName: eaTelemetry.name,
@@ -1093,7 +1127,7 @@ app.post(
         const ticket = String(position.ticket ?? '')
         const previous = previousByTicket.get(ticket)
         if (!previous) {
-          await recordJournalEvent({
+          await recordCurrentJournalEvent({
             eventKey: `position-opened:${ticket}:${Number(position.price_open ?? 0)}`,
             eventType: 'POSITION_OPENED',
             symbol: position.symbol,
@@ -1110,7 +1144,7 @@ app.post(
           Number(previous.volume) !== Number(position.volume) ||
           Number(previous.price_open) !== Number(position.price_open)
         ) {
-          await recordJournalEvent({
+          await recordCurrentJournalEvent({
             eventKey: `position-changed:${ticket}:${position.volume}:${position.price_open}:${position.type}`,
             eventType: 'POSITION_CHANGED',
             symbol: position.symbol,
@@ -1128,7 +1162,7 @@ app.post(
       for (const previous of previousPositions) {
         const ticket = String(previous.ticket)
         if (!currentByTicket.has(ticket)) {
-          await recordJournalEvent({
+          await recordCurrentJournalEvent({
             eventKey: `position-closed:${ticket}:${previous.updated_at}`,
             eventType: 'POSITION_CLOSED',
             symbol: previous.symbol,
@@ -1148,9 +1182,9 @@ app.post(
       if (!lastSnapshotTime || Date.now() - lastSnapshotTime >= PERFORMANCE_SNAPSHOT_INTERVAL_MS) {
         await run(
           mt5db,
-          `INSERT INTO mt5_performance (balance, equity, profit, captured_at)
-           VALUES (?, ?, ?, datetime('now'))`,
-          [Number(account.balance ?? 0), Number(account.equity ?? 0), Number(account.profit ?? 0)]
+          `INSERT INTO mt5_performance (account_login, balance, equity, profit, captured_at)
+           VALUES (?, ?, ?, ?, datetime('now'))`,
+          [accountLogin, Number(account.balance ?? 0), Number(account.equity ?? 0), Number(account.profit ?? 0)]
         )
       }
 
