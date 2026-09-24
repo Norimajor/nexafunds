@@ -351,14 +351,20 @@ const fetchLatestEvent = async (event) => {
   const timer = setTimeout(() => controller.abort(), USDNEWS_AI_TIMEOUT_MS)
 
   try {
+    console.log(`[USDNewsAI] Fetching ${event.toUpperCase()}...`)
     const response = await fetch(`${USDNEWS_AI_API_URL}/api/${event}/latest`, {
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-cache',
+      },
       signal: controller.signal,
     })
     const data = await response.json().catch(() => null)
 
     if (!response.ok || !data || data.error) {
-      const detail = data?.error || `USDNewsAI returned HTTP ${response.status}`
+      const detail = response.status === 304
+        ? 'USDNewsAI returned 304 Not Modified without a fresh payload'
+        : data?.error || `USDNewsAI returned HTTP ${response.status}`
       const error = new Error(detail)
       error.status = response.ok ? 502 : response.status
       throw error
@@ -443,6 +449,12 @@ app.get('/api/nfp', async (req, res) => {
 })
 
 app.get('/api/economic/latest', async (req, res) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  })
+
   const events = ['nfp', 'cpi', 'ppi', 'fomc']
   const results = await Promise.allSettled(events.map((event) => fetchLatestEvent(event)))
   const forecasts = Object.fromEntries(
@@ -454,7 +466,8 @@ app.get('/api/economic/latest', async (req, res) => {
 
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
-      console.error(`USDNewsAI ${events[index].toUpperCase()} request failed:`, result.reason)
+      const error = result.reason instanceof Error ? result.reason.message : String(result.reason)
+      console.error(`[USDNewsAI] ${events[index].toUpperCase()} unavailable: ${error}`)
     }
   })
 
