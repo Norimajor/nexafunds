@@ -105,9 +105,13 @@ export default function Dashboard() {
       try {
         const response = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' })
         const data = await response.json()
+        if (response.status === 401) {
+          if (!cancelled) navigate('/login', { replace: true })
+          return
+        }
         if (!cancelled && data.success && data.user) setUser(data.user)
       } catch (error) {
-        console.error('Failed to fetch user:', error)
+        if (!cancelled) console.error('Failed to fetch user:', error)
       }
     }
 
@@ -155,7 +159,7 @@ export default function Dashboard() {
 
     const fetchEaSettings = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/ea/settings`)
+        const response = await fetch(`${API_BASE}/api/ea/settings`, { credentials: 'include' })
         const data = await response.json()
         if (cancelled || !data.success) return
         setEaSettings({ ...defaultSettings, ...data.settings })
@@ -215,7 +219,7 @@ export default function Dashboard() {
       cancelled = true
       clearInterval(interval)
     }
-  }, [activeRange])
+  }, [activeRange, navigate])
 
   const money = (value) =>
     `$${Number(value).toLocaleString(undefined, {
