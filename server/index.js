@@ -346,31 +346,7 @@ const initDatabases = async () => {
 const USDNEWS_AI_API_URL = (process.env.USDNEWS_AI_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 const USDNEWS_AI_TIMEOUT_MS = Number(process.env.USDNEWS_AI_TIMEOUT_MS || 10000)
 
-const fetchLatestNfp = async () => {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), USDNEWS_AI_TIMEOUT_MS)
-
-  try {
-    const response = await fetch(`${USDNEWS_AI_API_URL}/api/nfp/latest`, {
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    })
-    const data = await response.json().catch(() => null)
-
-    if (!response.ok || !data || data.error) {
-      const detail = data?.error || `USDNewsAI returned HTTP ${response.status}`
-      const error = new Error(detail)
-      error.status = response.ok ? 502 : response.status
-      throw error
-    }
-
-    return data
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-const fetchLatestEconomic = async (event) => {
+const fetchLatestEvent = async (event) => {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), USDNEWS_AI_TIMEOUT_MS)
 
@@ -397,17 +373,33 @@ const fetchLatestEconomic = async (event) => {
 const normalizeEconomicForecast = (data, event) => {
   if (!data) return null
 
-  const prediction = data.prediction ?? data[`${event}_prediction`] ?? data.forecast
-  const consensus = data.consensus ?? data[`${event}_consensus`]
-  const surprise = data.surprise ?? data.expected_surprise
-  const direction = data.direction ?? data.surprise_direction ?? 'Neutral'
+  const forecastValues = {
+    nfp: [{ label: 'AI forecast', value: data.nfp_prediction, suffix: 'K' }],
+    cpi: [
+      { label: 'Headline MoM', value: data.headline_mom_prediction, suffix: '%' },
+      { label: 'Core MoM', value: data.core_mom_prediction, suffix: '%' },
+      { label: 'Headline YoY', value: data.headline_yoy_prediction, suffix: '%' },
+      { label: 'Core YoY', value: data.core_yoy_prediction, suffix: '%' },
+    ],
+    ppi: [
+      { label: 'Headline MoM', value: data.headline_mom_prediction, suffix: '%' },
+      { label: 'Headline YoY', value: data.headline_yoy_prediction, suffix: '%' },
+    ],
+    fomc: [{ label: 'AI forecast', value: data.predicted_decision, suffix: '' }],
+  }[event].filter(({ value }) => value != null)
+
+  const consensus = data.consensus ?? data[`${event}_consensus`] ?? data.headline_mom_consensus
+  const surprise = data.surprise ?? data.expected_surprise ?? data.expected_headline_mom_surprise
+  const direction = data.direction ?? data.surprise_direction ?? data.headline_mom_direction
 
   return {
     ...data,
-    prediction,
+    prediction: event === 'nfp' ? data.nfp_prediction : event === 'fomc' ? data.predicted_decision : null,
+    forecastValues,
     consensus,
     expected_surprise: surprise,
-    direction,
+    direction: direction || 'Neutral',
+    status: 'available',
   }
 }
 
@@ -417,7 +409,7 @@ const normalizeEconomicForecast = (data, event) => {
 
 app.get('/api/nfp/latest', async (req, res) => {
   try {
-    const data = await fetchLatestNfp()
+    const data = await fetchLatestEvent('nfp')
     res.json({ success: true, ...data })
   } catch (error) {
     const status = error.name === 'AbortError' ? 504 : error.status || 502
@@ -438,7 +430,7 @@ app.get('/api/nfp/latest', async (req, res) => {
 
 app.get('/api/nfp', async (req, res) => {
   try {
-    const data = await fetchLatestNfp()
+    const data = await fetchLatestEvent('nfp')
     res.json({ success: true, ...data })
   } catch (error) {
     const status = error.name === 'AbortError' ? 504 : error.status || 502
@@ -451,8 +443,8 @@ app.get('/api/nfp', async (req, res) => {
 })
 
 app.get('/api/economic/latest', async (req, res) => {
-  const events = ['cpi', 'ppi', 'fomc']
-  const results = await Promise.allSettled(events.map((event) => fetchLatestEconomic(event)))
+  const events = ['nfp', 'cpi', 'ppi', 'fomc']
+  const results = await Promise.allSettled(events.map((event) => fetchLatestEvent(event)))
   const forecasts = Object.fromEntries(
     events.map((event, index) => [
       event,
