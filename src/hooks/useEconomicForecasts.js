@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
-const API_BASE = 'https://nexafunds-app.onrender.com'
+const API_BASE = (
+  import.meta.env.VITE_NEXAFUNDS_API_URL ||
+  (import.meta.env.DEV ? 'http://127.0.0.1:4000' : 'https://nexafunds-app.onrender.com')
+).replace(/\/$/, '')
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000
 
 export function useEconomicForecasts() {
