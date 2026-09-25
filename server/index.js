@@ -343,7 +343,10 @@ const initDatabases = async () => {
 
 // USDNewsAI owns the NFP model and reads the latest prediction and consensus
 // files. NexaFunds keeps the public route stable and proxies the live payload.
-const USDNEWS_AI_API_URL = (process.env.USDNEWS_AI_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+const USDNEWS_AI_API_URL = (
+  process.env.USDNEWS_AI_API_URL ||
+  (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : 'https://usdnewsai.onrender.com')
+).replace(/\/$/, '')
 const USDNEWS_AI_TIMEOUT_MS = Number(process.env.USDNEWS_AI_TIMEOUT_MS || 10000)
 
 const fetchLatestEvent = async (event) => {
