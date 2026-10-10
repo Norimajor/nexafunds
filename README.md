@@ -70,12 +70,16 @@ WebRequest for listed URL** settings, then POST the following JSON to
 
 ```json
 {
-  "license_key": "NX1.<license-id>.<signature>",
+  "license_key": "NEXA-AI-<random-key>",
   "account_login": "12345678",
   "broker_server": "Exact-MT5-Server-Name",
   "account_type": "demo"
 }
 ```
+
+New approvals receive a random `NEXA-AI-...` key (for example,
+`NEXA-AI-2F09A81B773C4D17A6BC9120FE3385D4`). Existing signed `NX1` keys remain
+valid for licenses that were approved before this format was introduced.
 
 Populate those fields from the entered key and the connected terminal
 (`ACCOUNT_LOGIN`, `ACCOUNT_SERVER`, and `ACCOUNT_TRADE_MODE`). Enable trading only

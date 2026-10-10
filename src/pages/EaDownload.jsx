@@ -12,6 +12,7 @@ export default function EaDownload() {
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -75,6 +76,19 @@ export default function EaDownload() {
     }
   }
 
+  const handleCopyKey = async () => {
+    if (!license?.license_key) return
+    setError('')
+    setNotice('')
+    try {
+      await navigator.clipboard.writeText(license.license_key)
+      setNotice('License key copied.')
+    } catch (copyError) {
+      console.error('Unable to copy EA license key:', copyError)
+      setError('Could not copy the key. Select and copy it manually.')
+    }
+  }
+
   return (
     <PortalPageLayout activeLabel="EA access">
       <div className="min-h-screen p-4 text-[#f3f1e9] sm:p-8">
@@ -96,7 +110,11 @@ export default function EaDownload() {
               <div className="mt-5 border-t border-white/10 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[#a8b0a9]">Account-bound license key</p>
                 <code className="mt-2 block break-all text-sm text-[#eac16e]">{license.license_key}</code>
+                <button type="button" onClick={handleCopyKey} className="nf-secondary mt-3">
+                  Copy license key
+                </button>
               </div>
+              {notice && <p className="nf-form-success mt-3" role="status">{notice}</p>}
               {downloadAvailable ? (
                 <button
                   type="button"

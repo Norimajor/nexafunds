@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import multer from 'multer'
 
 const normalizeAccountType = (value) => String(value || '').trim().toLowerCase()
@@ -15,6 +15,26 @@ const signLicense = (license, secret) => {
   ].join(':')
   const signature = createHmac('sha256', secret).update(payload).digest('base64url')
   return `NX1.${Number(license.id).toString(36)}.${signature}`
+}
+
+const createLicenseKey = () => `NEXA-AI-${randomBytes(16).toString('hex').toUpperCase()}`
+
+const getOrCreateLicenseKey = async (db, license, { run, get }) => {
+  if (license.status !== 'active') return null
+  if (license.license_key) return license.license_key
+
+  await run(
+    db,
+    `UPDATE ea_licenses SET license_key = ?
+     WHERE id = ? AND status = 'active' AND license_key IS NULL`,
+    [createLicenseKey(), license.id]
+  )
+  const refreshedLicense = await get(
+    db,
+    'SELECT license_key FROM ea_licenses WHERE id = ?',
+    [license.id]
+  )
+  return refreshedLicense?.license_key || null
 }
 
 const isValidSignature = (license, token, secret) => {
@@ -122,22 +142,24 @@ export const createLicenseRouter = ({
         db,
         `SELECT id, user_id, broker_name,
                 CASE WHEN broker_server LIKE 'pending-%' THEN '' ELSE broker_server END AS broker_server,
-                account_login, account_type,
+                account_login, account_type, license_key,
                 status, created_at, approved_at
          FROM ea_licenses WHERE user_id = ? ORDER BY id DESC`,
         [req.session.user.id]
       )
+      const licenseKeys = process.env.LICENSE_SIGNING_SECRET
+        ? await Promise.all(
+            licenses.map((license) => getOrCreateLicenseKey(db, license, { run, get }))
+          )
+        : licenses.map(() => null)
 
       res.json({
         success: true,
         license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
         download_available: hasDownload(fs, path),
-        licenses: licenses.map((license) => ({
+        licenses: licenses.map((license, index) => ({
           ...license,
-          license_key:
-            license.status === 'active' && process.env.LICENSE_SIGNING_SECRET
-              ? signLicense(license, process.env.LICENSE_SIGNING_SECRET)
-              : null,
+          license_key: licenseKeys[index],
         })),
       })
     })
@@ -205,10 +227,7 @@ export const createLicenseRouter = ({
           broker_server: license.broker_server.startsWith('pending-')
             ? ''
             : license.broker_server,
-          license_key:
-            license.status === 'active' && process.env.LICENSE_SIGNING_SECRET
-              ? signLicense(license, process.env.LICENSE_SIGNING_SECRET)
-              : null,
+          license_key: license.status === 'active' ? license.license_key : null,
         },
       })
     })
@@ -233,25 +252,43 @@ export const createLicenseRouter = ({
         return res.status(400).json({ success: false, valid: false })
       }
 
-      const parts = body.license_key.trim().split('.')
-      const id = parts.length === 3 && /^[0-9a-z]+$/.test(parts[1])
-        ? Number.parseInt(parts[1], 36)
-        : NaN
-      if (!Number.isSafeInteger(id) || id < 1) {
-        return res.status(401).json({ success: false, valid: false })
+      const licenseKey = body.license_key.trim()
+      const isNewKey = /^NEXA-AI-[A-F0-9]{32}$/.test(licenseKey)
+      let license
+      let keyMatches = false
+      if (isNewKey) {
+        license = await get(
+          db,
+          'SELECT * FROM ea_licenses WHERE license_key = ?',
+          [licenseKey]
+        )
+        if (license?.license_key) {
+          const suppliedBuffer = Buffer.from(licenseKey)
+          const storedBuffer = Buffer.from(license.license_key)
+          keyMatches =
+            suppliedBuffer.length === storedBuffer.length &&
+            timingSafeEqual(suppliedBuffer, storedBuffer)
+        }
+      } else {
+        const parts = licenseKey.split('.')
+        const id = parts.length === 3 && /^[0-9a-z]+$/.test(parts[1])
+          ? Number.parseInt(parts[1], 36)
+          : NaN
+        if (!Number.isSafeInteger(id) || id < 1) {
+          return res.status(401).json({ success: false, valid: false })
+        }
+        license = await get(db, 'SELECT * FROM ea_licenses WHERE id = ?', [id])
+        keyMatches = license
+          ? isValidSignature(license, licenseKey, process.env.LICENSE_SIGNING_SECRET)
+          : false
       }
 
-      const license = await get(db, 'SELECT * FROM ea_licenses WHERE id = ?', [id])
       const valid =
         license?.status === 'active' &&
         license.account_login === accountLogin &&
         license.broker_server.toLowerCase() === brokerServer.toLowerCase() &&
         license.account_type === accountType &&
-        isValidSignature(
-          license,
-          body.license_key,
-          process.env.LICENSE_SIGNING_SECRET
-        )
+        keyMatches
 
       if (!valid) {
         return res.status(401).json({ success: false, valid: false })
@@ -410,14 +447,16 @@ export const createLicenseRouter = ({
       }
 
       const status = decision === 'approve' ? 'active' : 'rejected'
+      const licenseKey = status === 'active' ? createLicenseKey() : null
       const result = await run(
         db,
         `UPDATE ea_licenses
          SET status = ?,
              broker_server = CASE WHEN ? = 'active' THEN ? ELSE broker_server END,
+             license_key = CASE WHEN ? = 'active' THEN ? ELSE license_key END,
              approved_at = CASE WHEN ? = 'active' THEN CURRENT_TIMESTAMP ELSE NULL END
          WHERE id = ? AND status = 'pending'`,
-        [status, status, brokerServer, status, req.params.licenseId]
+        [status, status, brokerServer, status, licenseKey, status, req.params.licenseId]
       )
 
       if (!result.changes) {

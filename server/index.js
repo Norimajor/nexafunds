@@ -241,9 +241,19 @@ const initDatabases = async () => {
       account_login TEXT NOT NULL,
       account_type TEXT NOT NULL CHECK (account_type IN ('demo', 'real')),
       status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'rejected')),
+      license_key TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       approved_at DATETIME
     )`
+  )
+  const licenseColumns = await all(db, 'PRAGMA table_info(ea_licenses)')
+  if (!licenseColumns.some((column) => column.name === 'license_key')) {
+    await run(db, 'ALTER TABLE ea_licenses ADD COLUMN license_key TEXT')
+  }
+  await run(
+    db,
+    `CREATE UNIQUE INDEX IF NOT EXISTS ea_licenses_license_key_unique
+     ON ea_licenses(license_key) WHERE license_key IS NOT NULL`
   )
   await run(
     db,

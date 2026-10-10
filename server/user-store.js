@@ -113,12 +113,20 @@ export const createPostgresUserStore = ({ connectionString }) => {
           account_login TEXT NOT NULL,
           account_type TEXT NOT NULL CHECK (account_type IN ('demo', 'real')),
           status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'rejected')),
+          license_key TEXT,
           created_at TEXT NOT NULL DEFAULT TO_CHAR(
             CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
             'YYYY-MM-DD HH24:MI:SS'
           ),
           approved_at TEXT
         )
+      `)
+      await pool.query(
+        'ALTER TABLE ea_licenses ADD COLUMN IF NOT EXISTS license_key TEXT'
+      )
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS ea_licenses_license_key_unique
+        ON ea_licenses(license_key) WHERE license_key IS NOT NULL
       `)
       await pool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS ea_licenses_account_unique
