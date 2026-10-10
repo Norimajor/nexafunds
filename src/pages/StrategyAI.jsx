@@ -68,7 +68,7 @@ const navigationTopics = [
     path: '/dashboard?section=ea-access',
     description: 'Register an MT5 account, follow verification, and access an approved EA.',
     details:
-      'Open EA access from the Dashboard sidebar. For a live account, use the Pepperstone partner link or QR code to open it under the NexaFunds IB, then select Live and Pepperstone. For a demo account, select Demo and type the broker name. Enter your MT5 account number; NexaFunds verifies the exact server during review before issuing the account-bound key and download.',
+      'Open EA access from the Dashboard sidebar. For a live account, choose Pepperstone or Headway and use its partner link or QR code to open it under the NexaFunds IB. Existing Headway customers should ask Headway to change their partner ID to 4809668. For a demo account, select Demo and type the broker name. Enter your MT5 account number; NexaFunds verifies the exact server during review before issuing the account-bound key and download.',
   },
   {
     label: 'Portfolio',

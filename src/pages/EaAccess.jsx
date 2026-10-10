@@ -4,6 +4,8 @@ import { QRCodeSVG } from 'qrcode.react'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
 const PEPPERSTONE_IB_URL = 'https://trk.pepperstonepartners.com/aff_c?offer_id=367&aff_id=51096&source=52793&referral_source=52793&referral_provider=tune_link'
+const HEADWAY_IB_URL = 'https://headway.partners/user/signup?hwp=9ce669'
+const HEADWAY_PARTNER_ID = '4809668'
 
 const formatDate = (value) => {
   if (!value) return 'Not reviewed yet'
@@ -22,6 +24,7 @@ export default function EaAccess({ embedded = false }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [brokerName, setBrokerName] = useState('')
+  const [liveBroker, setLiveBroker] = useState('Pepperstone')
   const [accountLogin, setAccountLogin] = useState('')
   const [accountType, setAccountType] = useState('demo')
   const [ibConfirmation, setIbConfirmation] = useState(false)
@@ -105,7 +108,7 @@ export default function EaAccess({ embedded = false }) {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          broker_name: accountType === 'real' ? 'Pepperstone' : brokerName.trim(),
+          broker_name: accountType === 'real' ? liveBroker : brokerName.trim(),
           account_login: accountLogin.trim(),
           account_type: accountType,
           ib_confirmation: ibConfirmation,
@@ -196,27 +199,35 @@ export default function EaAccess({ embedded = false }) {
 
       <div className={embedded ? 'nf-workspace-main nf-workspace-embedded' : 'nf-workspace-main'}>
         <aside className="nf-ib-referral" aria-labelledby="nf-ib-referral-heading">
-          <div>
+          <div className="nf-ib-referral-intro">
             <span className="nf-ib-referral-label">NEXAFUNDS INTRODUCING BROKER</span>
-            <h2 id="nf-ib-referral-heading">New to Pepperstone? Open your account through our partner link.</h2>
+            <h2 id="nf-ib-referral-heading">Choose a partner when opening a live account.</h2>
             <p>
-              Use the NexaFunds Pepperstone link when creating your trading account so it can be associated with our Introducing Broker (IB). Once your MT5 account is ready, register the account number below. We’ll verify the exact MT5 server during review before issuing an account-bound EA key.
+              New to one of these brokers? Use its NexaFunds partner link so your account can be associated with our Introducing Broker (IB). Already have a Headway account? Ask Headway to change your partner ID to <strong>{HEADWAY_PARTNER_ID}</strong>. Once your account is ready, choose the same broker below and submit your MT5 account number; we’ll verify the exact server during review.
             </p>
           </div>
-          <div className="nf-ib-referral-actions">
-            <div className="nf-ib-qr">
-              <QRCodeSVG
-                value={PEPPERSTONE_IB_URL}
-                size={112}
-                level="H"
-                includeMargin
-                title="Scan to open a Pepperstone account through the NexaFunds partner link"
-              />
-              <span>Scan to open the partner link</span>
-            </div>
-            <a href={PEPPERSTONE_IB_URL} target="_blank" rel="noopener noreferrer">
-              Open a Pepperstone account <span aria-hidden="true">↗</span>
-            </a>
+          <div className="nf-ib-referral-options">
+            <article className="nf-ib-referral-option nf-ib-referral-pepperstone">
+              <div className="nf-ib-qr">
+                <QRCodeSVG value={PEPPERSTONE_IB_URL} size={104} level="H" includeMargin title="Scan to open a Pepperstone account through the NexaFunds partner link" />
+                <span>Scan Pepperstone link</span>
+              </div>
+              <div>
+                <strong>Pepperstone</strong>
+                <a href={PEPPERSTONE_IB_URL} target="_blank" rel="noopener noreferrer">Open a new account ↗</a>
+              </div>
+            </article>
+            <article className="nf-ib-referral-option nf-ib-referral-headway">
+              <div className="nf-ib-qr">
+                <QRCodeSVG value={HEADWAY_IB_URL} size={104} level="H" includeMargin title="Scan to open a Headway account through the NexaFunds partner link" />
+                <span>Scan Headway link</span>
+              </div>
+              <div>
+                <strong>Headway</strong>
+                <a href={HEADWAY_IB_URL} target="_blank" rel="noopener noreferrer">Open a new account ↗</a>
+                <span>Existing accounts: request partner ID {HEADWAY_PARTNER_ID}</span>
+              </div>
+            </article>
           </div>
         </aside>
 
@@ -225,8 +236,8 @@ export default function EaAccess({ embedded = false }) {
           <h1>{embedded ? 'EA account access' : 'Connect your trading account.'}</h1>
           <p>
             {embedded
-              ? 'Register your Pepperstone MT5 account, follow its verification, and get your account-bound EA key.'
-              : 'Register the Pepperstone MT5 account you opened through our IB partner link. Each request is reviewed before an account-bound key is issued.'}
+              ? 'Register your MT5 account, follow its verification, and get your account-bound EA key.'
+              : 'Register a demo or live MT5 account. Live accounts must be opened through one of our IB partner links. Each request is reviewed before an account-bound key is issued.'}
           </p>
         </div>
 
@@ -253,14 +264,15 @@ export default function EaAccess({ embedded = false }) {
                 </label>
                 <label className={`nf-choice nf-choice-live${accountType === 'real' ? ' nf-choice-live-active' : ''}`}>
                   <input type="radio" name="account-type" value="real" checked={accountType === 'real'} onChange={() => setAccountType('real')} />
-                  <span><strong>Live</strong><small>Pepperstone · NexaFunds IB</small></span>
+                  <span><strong>Live</strong><small>Pepperstone or Headway · NexaFunds IB</small></span>
                 </label>
               </fieldset>
               <label className="nf-form-field">
                 <span>Broker</span>
                 {accountType === 'real' ? (
-                  <select className="nf-broker-select" defaultValue="Pepperstone" aria-label="Broker" disabled>
+                  <select className="nf-broker-select" value={liveBroker} onChange={(event) => setLiveBroker(event.target.value)} aria-label="Broker" required>
                     <option value="Pepperstone">Pepperstone · NexaFunds IB</option>
+                    <option value="Headway">Headway · NexaFunds IB</option>
                   </select>
                 ) : (
                   <input
