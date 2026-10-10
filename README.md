@@ -29,6 +29,12 @@ LICENSE_SIGNING_SECRET=<long random signing secret>
 EA_DOWNLOAD_PATH=<absolute path to the compiled .ex5 file>
 ```
 
+If the EA access page reports that licensing is not configured, set
+`LICENSE_SIGNING_SECRET` in the hosting environment for the NexaFunds API service
+(for example, Render's service environment variables) and redeploy/restart that
+service. The API returns HTTP 503 until this backend-only value is present. Use a
+long, randomly generated secret; do not put it in frontend `VITE_*` variables.
+
 Do not expose these values through `VITE_*` variables or commit real secrets. The
 EA download route serves only the configured compiled `.ex5` file, and only to an
 authenticated owner of an active license. The source snapshots in

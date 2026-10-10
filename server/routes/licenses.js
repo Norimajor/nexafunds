@@ -60,7 +60,8 @@ export const createLicenseRouter = ({
     if (!process.env.LICENSE_SIGNING_SECRET) {
       return res.status(503).json({
         success: false,
-        error: 'EA licensing is not configured. Please contact support.',
+        error:
+          'EA licensing is unavailable because the API server is missing its license signing secret. Please contact NexaFunds support.',
       })
     }
     next()

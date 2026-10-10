@@ -495,11 +495,11 @@ const goTo = (labelName) => {
 
   return (
     <div
-      className={
+      className={`nf-dashboard-page ${
         isDark
           ? 'relative min-h-screen overflow-x-hidden bg-[#090d0f] text-slate-100'
           : 'relative min-h-screen overflow-x-hidden bg-[#eef2f8] text-slate-900'
-      }
+      }`}
     >
       {/* Layered market background */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(91,209,167,0.13),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(73,179,139,0.10),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(234,193,110,0.09),transparent_60%)]">

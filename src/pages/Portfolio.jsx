@@ -69,12 +69,12 @@ export default function Portfolio() {
   )
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="min-h-screen space-y-6 bg-[#090d0f] p-4 text-[#f3f1e9] sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Portfolio</h1>
-          <p className="text-slate-400">
+          <p className="text-[#a8b0a9]">
             Live MT5 portfolio overview
           </p>
         </div>
@@ -82,7 +82,7 @@ export default function Portfolio() {
         <div
           className={`rounded-full px-3 py-1 text-sm font-medium ${
             connected
-              ? 'bg-emerald-500/10 text-emerald-500'
+              ? 'bg-[#5bd1a7]/10 text-[#5bd1a7]'
               : 'bg-rose-500/10 text-rose-400'
           }`}
         >
@@ -96,27 +96,27 @@ export default function Portfolio() {
           Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-28 animate-pulse rounded-3xl bg-slate-800/60"
+              className="h-28 animate-pulse rounded-3xl bg-[#14211d]/80"
             />
           ))
         ) : (
           <>
-            <div className="rounded-3xl border border-slate-800/80 bg-slate-900/70 p-5">
-              <p className="text-sm text-slate-400">Current balance</p>
+            <div className="rounded-3xl border border-[#eac16e]/15 bg-[#111a17]/90 p-5">
+              <p className="text-sm text-[#a8b0a9]">Current balance</p>
               <h3 className="mt-3 text-3xl font-bold">
                 {formatMoney(account.balance)}
               </h3>
             </div>
 
-            <div className="rounded-3xl border border-slate-800/80 bg-slate-900/70 p-5">
-              <p className="text-sm text-slate-400">Portfolio value</p>
+            <div className="rounded-3xl border border-[#eac16e]/15 bg-[#111a17]/90 p-5">
+              <p className="text-sm text-[#a8b0a9]">Portfolio value</p>
               <h3 className="mt-3 text-3xl font-bold">
                 {formatMoney(account.equity)}
               </h3>
             </div>
 
-            <div className="rounded-3xl border border-slate-800/80 bg-slate-900/70 p-5">
-              <p className="text-sm text-slate-400">Net profit</p>
+            <div className="rounded-3xl border border-[#eac16e]/15 bg-[#111a17]/90 p-5">
+              <p className="text-sm text-[#a8b0a9]">Net profit</p>
               <h3
                 className={`mt-3 text-3xl font-bold ${
                   Number(account.profit) >= 0
@@ -128,8 +128,8 @@ export default function Portfolio() {
               </h3>
             </div>
 
-            <div className="rounded-3xl border border-slate-800/80 bg-slate-900/70 p-5">
-              <p className="text-sm text-slate-400">Invested capital</p>
+            <div className="rounded-3xl border border-[#eac16e]/15 bg-[#111a17]/90 p-5">
+              <p className="text-sm text-[#a8b0a9]">Invested capital</p>
               <h3 className="mt-3 text-3xl font-bold">
                 {formatMoney(account.balance)}
               </h3>
@@ -139,11 +139,11 @@ export default function Portfolio() {
       </div>
 
       {/* Active Holdings */}
-      <div className="rounded-3xl border border-slate-800/80 bg-slate-900/70 p-6">
+      <div className="rounded-3xl border border-[#eac16e]/15 bg-[#111a17]/90 p-6">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-semibold">Active holdings</h3>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-[#a8b0a9]">
               Live open positions from the active MT5 account
             </p>
           </div>
@@ -154,14 +154,14 @@ export default function Portfolio() {
         </div>
 
         {positions.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/60 p-8 text-center text-sm text-slate-400">
+          <div className="rounded-2xl border border-dashed border-[#eac16e]/20 bg-[#0b100e]/70 p-8 text-center text-sm text-[#a8b0a9]">
             No active MT5 positions.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
-                <tr className="border-b border-slate-700 text-left text-slate-400">
+                <tr className="border-b border-[#eac16e]/20 text-left text-[#a8b0a9]">
                   <th className="py-3 pr-4 font-medium">Trading pair</th>
                   <th className="py-3 pr-4 font-medium">Type</th>
                   <th className="py-3 pr-4 font-medium">Volume</th>
@@ -175,7 +175,7 @@ export default function Portfolio() {
                 {positions.map((p) => (
                   <tr
                     key={p.ticket}
-                    className="border-b border-slate-800/80 last:border-0"
+                    className="border-b border-white/[0.06] last:border-0"
                   >
                     <td className="py-3 pr-4 font-medium">{p.symbol}</td>
 
@@ -221,11 +221,11 @@ export default function Portfolio() {
       </div>
 
       {/* Portfolio Allocation */}
-      <div className="rounded-3xl border border-slate-800/80 bg-slate-900/70 p-6">
+      <div className="rounded-3xl border border-[#eac16e]/15 bg-[#111a17]/90 p-6">
         <h3 className="text-xl font-semibold">Portfolio allocation</h3>
 
         {totalExposure === 0 ? (
-          <p className="mt-4 text-sm text-slate-400">
+          <p className="mt-4 text-sm text-[#a8b0a9]">
             No open positions available for allocation analysis.
           </p>
         ) : (
@@ -237,14 +237,14 @@ export default function Portfolio() {
                 <div key={symbol}>
                   <div className="mb-2 flex items-center justify-between text-sm">
                     <span className="font-medium">{symbol}</span>
-                    <span className="text-slate-300">
+                    <span className="text-[#d1d5cc]">
                       {percentage.toFixed(1)}%
                     </span>
                   </div>
 
-                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-2 overflow-hidden rounded-full bg-[#26322c]">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-sky-500 to-emerald-500 transition-all duration-500"
+                      className="h-full rounded-full bg-gradient-to-r from-[#eac16e] to-[#5bd1a7] transition-all duration-500"
                       style={{ width: `${percentage}%` }}
                     />
                   </div>

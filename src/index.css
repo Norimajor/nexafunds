@@ -143,6 +143,18 @@ select {
 .nf-workspace-embedded .nf-license-form { gap: 12px; }
 .nf-workspace-embedded .nf-form-field input { min-height: 42px; }
 .nf-workspace-embedded .nf-empty-state { min-height: 132px; }
+.nf-dashboard-page [class*="from-blue-"], .nf-dashboard-page [class*="from-sky-"], .nf-dashboard-page [class*="to-cyan-"] { background-image: linear-gradient(135deg, #eac16e, #5bd1a7) !important; }
+.nf-dashboard-page [class*="text-blue-"], .nf-dashboard-page [class*="text-sky-"], .nf-dashboard-page [class*="text-cyan-"] { color: #5bd1a7 !important; }
+.nf-dashboard-page [class*="bg-blue-"], .nf-dashboard-page [class*="bg-sky-"], .nf-dashboard-page [class*="bg-cyan-"] { background-color: rgba(91, 209, 167, .12) !important; }
+.nf-dashboard-page [class*="border-blue-"], .nf-dashboard-page [class*="border-sky-"], .nf-dashboard-page [class*="border-cyan-"] { border-color: rgba(234, 193, 110, .28) !important; }
+[class~="bg-[#020d20]"] { background-color: #090d0f; }
+[class~="bg-[#020d20]"] > div:first-child { background-image: radial-gradient(circle at 74% 4%, rgba(91, 209, 167, .16), transparent 27%), radial-gradient(circle at 78% 66%, rgba(234, 193, 110, .12), transparent 36%), linear-gradient(120deg, rgba(8, 17, 14, .94), rgba(10, 14, 13, .98)) !important; }
+[class~="bg-[#020d20]"] aside { border-color: rgba(234, 193, 110, .15); background-color: rgba(9, 19, 22, .92); }
+[class~="bg-[#020d20]"] [class*="from-blue-"], [class~="bg-[#020d20]"] [class*="to-cyan-"], [class~="bg-[#020d20]"] [class*="from-cyan-"] { background-image: linear-gradient(135deg, #eac16e, #5bd1a7) !important; }
+[class~="bg-[#020d20]"] [class*="text-blue-"], [class~="bg-[#020d20]"] [class*="text-cyan-"] { color: #eac16e !important; }
+[class~="bg-[#020d20]"] [class*="border-blue-"], [class~="bg-[#020d20]"] [class*="border-cyan-"] { border-color: rgba(234, 193, 110, .3) !important; }
+[class~="bg-[#020d20]"] [class*="bg-blue-"], [class~="bg-[#020d20]"] [class*="bg-cyan-"] { background-color: rgba(91, 209, 167, .12) !important; }
+[class~="bg-[#020d20]"] section > div[style] { background: radial-gradient(ellipse at 84% 18%, rgba(91, 209, 167, .2), transparent 42%), radial-gradient(ellipse at 85% 88%, rgba(234, 193, 110, .14), transparent 43%) !important; }
 .nf-workspace-header { max-width: 1240px; margin: auto; padding: 26px 36px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(184, 194, 175, .11); }
 .nf-brand-button { padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .nf-workspace-user { display: flex; align-items: center; gap: 22px; color: #c7ccc3; font-size: .88rem; }
