@@ -14,14 +14,13 @@ returned as unavailable data; the dashboard does not fall back to hardcoded valu
 ## MT5 EA account verification and licensing
 
 After creating an account, clients register their broker, exact MT5 server, account
-number, and demo/live account type at `/ea-access`. Demo accounts are issued a key
-immediately. Live-account requests remain pending until an administrator verifies
-that the account is under the NexaFunds IB in `/admin/licenses`. The account number
+number, and demo/live account type at `/ea-access`. All requests remain pending
+until an administrator verifies them in `/admin/licenses`. Approved clients receive
+a signed key and can download the uploaded EA from their account. The account number
 and server are unique across submissions; each active license is bound to that
 account and its demo/live mode.
 
-Configure these backend-only environment variables before accepting license
-requests:
+Configure these backend-only environment variables on the NexaFunds API service:
 
 ```env
 ADMIN_API_KEY=<private admin key>
@@ -29,11 +28,17 @@ LICENSE_SIGNING_SECRET=<long random signing secret>
 EA_DOWNLOAD_PATH=<absolute path to the compiled .ex5 file>
 ```
 
-If the EA access page reports that licensing is not configured, set
-`LICENSE_SIGNING_SECRET` in the hosting environment for the NexaFunds API service
-(for example, Render's service environment variables) and redeploy/restart that
-service. The API returns HTTP 503 until this backend-only value is present. Use a
-long, randomly generated secret; do not put it in frontend `VITE_*` variables.
+The administrator opens `/admin/licenses` and supplies `ADMIN_API_KEY` to review
+requests and upload the compiled `.ex5` file. `EA_DOWNLOAD_PATH` must point to a
+writable `.ex5` file on the API server. On hosts such as Render, attach a persistent
+disk and place the file under its mount path so it survives deploys and restarts.
+
+Clients can submit requests while `LICENSE_SIGNING_SECRET` is missing, but the
+administrator cannot approve requests or issue keys until it is set. Configure a
+long, randomly generated secret in the API hosting environment (for example,
+Render's service environment variables), then restart/redeploy the API. Do not put it
+in frontend `VITE_*` variables. Never expose these values through `VITE_*`
+variables or commit real secrets.
 
 Do not expose these values through `VITE_*` variables or commit real secrets. The
 EA download route serves only the configured compiled `.ex5` file, and only to an

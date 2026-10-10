@@ -14,6 +14,7 @@ export default function EaAccess({ embedded = false }) {
   const [user, setUser] = useState(null)
   const [licenses, setLicenses] = useState([])
   const [downloadAvailable, setDownloadAvailable] = useState(false)
+  const [licenseConfigured, setLicenseConfigured] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -38,8 +39,25 @@ export default function EaAccess({ embedded = false }) {
     }
     setLicenses(data.licenses || [])
     setDownloadAvailable(Boolean(data.download_available))
+    setLicenseConfigured(Boolean(data.license_configured))
+    const approvedLicense = (data.licenses || []).find((license) => license.status === 'active' && license.license_key)
+    if (approvedLicense && data.download_available) {
+      navigate(`/ea-download/${approvedLicense.id}`)
+    }
     return true
   }, [navigate])
+
+  useEffect(() => {
+    if (loading) return undefined
+
+    const refresh = () => {
+      loadLicenses().catch((loadError) => {
+        setError(loadError.message || 'Unable to refresh your EA access.')
+      })
+    }
+    const interval = window.setInterval(refresh, 15000)
+    return () => window.clearInterval(interval)
+  }, [loadLicenses, loading])
 
   useEffect(() => {
     let cancelled = false
@@ -98,11 +116,10 @@ export default function EaAccess({ embedded = false }) {
         throw new Error(data.error || 'Unable to submit your MT5 account.')
       }
 
-      setNotice(
-        accountType === 'demo'
-          ? 'Demo account verified. Your account-bound license key is ready below.'
-          : 'Your live account is submitted for IB verification. We will activate its key after review.'
-      )
+      setLicenseConfigured(Boolean(data.license_configured))
+      setNotice(data.license_configured
+        ? 'Your MT5 account is submitted for verification. We will issue your account-bound key after approval.'
+        : 'Your MT5 account is submitted and will be queued for review. Key issuance is temporarily unavailable while NexaFunds configures licensing.')
       setBrokerName('')
       setBrokerServer('')
       setAccountLogin('')
@@ -186,12 +203,17 @@ export default function EaAccess({ embedded = false }) {
           <p>
             {embedded
               ? 'Register an MT5 account, review its license, and get your account-bound EA key.'
-              : 'Register the exact MT5 account you opened under our IB. Demo accounts are approved automatically; live accounts are reviewed before a key is issued.'}
+              : 'Register the exact MT5 account you opened under our IB. Each request is reviewed before an account-bound key is issued.'}
           </p>
         </div>
 
         {error && <p className="nf-form-error nf-page-message" role="alert">{error}</p>}
         {notice && <p className="nf-form-success nf-page-message" role="status">{notice}</p>}
+        {!loading && !licenseConfigured && (
+          <p className="nf-form-error nf-page-message" role="status">
+            License signing is not configured on the NexaFunds API yet. You can submit an account request, but NexaFunds must configure its signing secret before an administrator can issue keys.
+          </p>
+        )}
 
         <div className="nf-license-layout">
           <section className="nf-panel nf-request-panel">
@@ -216,11 +238,11 @@ export default function EaAccess({ embedded = false }) {
                 <legend>Account type</legend>
                 <label className={accountType === 'demo' ? 'nf-choice nf-choice-active' : 'nf-choice'}>
                   <input type="radio" name="account-type" value="demo" checked={accountType === 'demo'} onChange={() => setAccountType('demo')} />
-                  <span><strong>Demo</strong><small>Instant key approval</small></span>
+                  <span><strong>Demo</strong><small>Verification required</small></span>
                 </label>
                 <label className={accountType === 'real' ? 'nf-choice nf-choice-active' : 'nf-choice'}>
                   <input type="radio" name="account-type" value="real" checked={accountType === 'real'} onChange={() => setAccountType('real')} />
-                  <span><strong>Live</strong><small>IB verification required</small></span>
+                  <span><strong>Live</strong><small>Verification required</small></span>
                 </label>
               </fieldset>
               <label className="nf-ib-confirmation">

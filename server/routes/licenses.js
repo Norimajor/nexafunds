@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
+import multer from 'multer'
 
 const normalizeAccountType = (value) => String(value || '').trim().toLowerCase()
 
@@ -55,6 +56,52 @@ export const createLicenseRouter = ({
   path,
 }) => {
   const router = Router()
+  const eaUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, callback) => {
+        const configuredPath = process.env.EA_DOWNLOAD_PATH
+        if (!configuredPath || path.extname(configuredPath).toLowerCase() !== '.ex5') {
+          callback(new Error('Set EA_DOWNLOAD_PATH to a writable .ex5 path on the API server.'))
+          return
+        }
+
+        const directory = path.dirname(path.resolve(configuredPath))
+        try {
+          fs.mkdirSync(directory, { recursive: true })
+          callback(null, directory)
+        } catch (error) {
+          callback(error)
+        }
+      },
+      filename: (_req, _file, callback) => {
+        const targetName = path.basename(process.env.EA_DOWNLOAD_PATH)
+        callback(null, `.${targetName}.${randomUUID()}.upload`)
+      },
+    }),
+    limits: { fileSize: 100 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, callback) => {
+      if (path.extname(file.originalname).toLowerCase() !== '.ex5') {
+        callback(new Error('Upload a compiled MetaTrader .ex5 EA file.'))
+        return
+      }
+      callback(null, true)
+    },
+  }).single('ea_file')
+
+  const receiveEaUpload = (req, res, next) => {
+    eaUpload(req, res, (error) => {
+      if (!error) {
+        next()
+        return
+      }
+
+      if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {})
+      res.status(error instanceof multer.MulterError ? 400 : 503).json({
+        success: false,
+        error: error.message || 'Unable to receive the EA file.',
+      })
+    })
+  }
 
   const requireLicenseConfig = (req, res, next) => {
     if (!process.env.LICENSE_SIGNING_SECRET) {
@@ -70,7 +117,6 @@ export const createLicenseRouter = ({
   router.get(
     '/licenses/mine',
     requireAuth,
-    requireLicenseConfig,
     asyncRoute(async (req, res) => {
       const licenses = await all(
         db,
@@ -82,11 +128,12 @@ export const createLicenseRouter = ({
 
       res.json({
         success: true,
+        license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
         download_available: hasDownload(fs, path),
         licenses: licenses.map((license) => ({
           ...license,
           license_key:
-            license.status === 'active'
+            license.status === 'active' && process.env.LICENSE_SIGNING_SECRET
               ? signLicense(license, process.env.LICENSE_SIGNING_SECRET)
               : null,
         })),
@@ -97,7 +144,6 @@ export const createLicenseRouter = ({
   router.post(
     '/licenses',
     requireAuth,
-    requireLicenseConfig,
     asyncRoute(async (req, res) => {
       const body = req.body || {}
       const brokerName = String(body.broker_name || '').trim()
@@ -134,7 +180,7 @@ export const createLicenseRouter = ({
             brokerServer,
             accountLogin,
             accountType,
-            accountType === 'demo' ? 'active' : 'pending',
+            'pending',
           ]
         )
       } catch (error) {
@@ -152,10 +198,11 @@ export const createLicenseRouter = ({
       ])
       res.status(201).json({
         success: true,
+        license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
         license: {
           ...license,
           license_key:
-            license.status === 'active'
+            license.status === 'active' && process.env.LICENSE_SIGNING_SECRET
               ? signLicense(license, process.env.LICENSE_SIGNING_SECRET)
               : null,
         },
@@ -258,7 +305,6 @@ export const createLicenseRouter = ({
   router.get(
     '/admin/licenses',
     requireAdmin,
-    requireLicenseConfig,
     asyncRoute(async (_req, res) => {
       const licenses = await all(
         db,
@@ -269,6 +315,71 @@ export const createLicenseRouter = ({
          ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.id DESC`
       )
       res.json({ success: true, licenses })
+    })
+  )
+
+  router.get(
+    '/admin/ea',
+    requireAdmin,
+    (_req, res) => {
+      res.json({
+        success: true,
+        license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
+        download_available: hasDownload(fs, path),
+        file_name: process.env.EA_DOWNLOAD_PATH
+          ? path.basename(process.env.EA_DOWNLOAD_PATH)
+          : null,
+      })
+    }
+  )
+
+  router.post(
+    '/admin/ea/upload',
+    requireAdmin,
+    receiveEaUpload,
+    asyncRoute(async (req, res) => {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: 'Choose a compiled MetaTrader .ex5 EA file to upload.',
+        })
+      }
+
+      const targetPath = path.resolve(process.env.EA_DOWNLOAD_PATH)
+      const backupPath = `${targetPath}.${randomUUID()}.backup`
+      let backupCreated = false
+      try {
+        try {
+          await fs.promises.rename(targetPath, backupPath)
+          backupCreated = true
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error
+        }
+        await fs.promises.rename(req.file.path, targetPath)
+      } catch (error) {
+        if (backupCreated) {
+          await fs.promises.rename(backupPath, targetPath).catch((restoreError) => {
+            console.error('Unable to restore previous EA upload:', restoreError)
+          })
+        }
+        await fs.promises.unlink(req.file.path).catch((cleanupError) => {
+          if (cleanupError.code !== 'ENOENT') {
+            console.error('Unable to remove temporary EA upload:', cleanupError)
+          }
+        })
+        throw error
+      }
+      if (backupCreated) {
+        await fs.promises.unlink(backupPath).catch((cleanupError) => {
+          console.error('Unable to remove previous EA upload backup:', cleanupError)
+        })
+      }
+
+      res.json({
+        success: true,
+        download_available: true,
+        file_name: path.basename(targetPath),
+      })
     })
   )
 
