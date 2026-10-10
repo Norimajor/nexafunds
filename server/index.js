@@ -4,6 +4,7 @@ import sqlite3 from 'sqlite3'
 import bcrypt from 'bcrypt'
 import dotenv from 'dotenv'
 import session from 'express-session'
+import connectPgSimple from 'connect-pg-simple'
 import fs from 'fs' 
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -33,6 +34,7 @@ const userStore = process.env.DATABASE_URL
   ? createPostgresUserStore({ connectionString: process.env.DATABASE_URL })
   : null
 const userDb = userStore || db
+const PgSessionStore = connectPgSimple(session)
 const PERFORMANCE_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000
 const EA_HEARTBEAT_TIMEOUT_MS = 30 * 1000
 
@@ -74,6 +76,14 @@ if (isProd && !process.env.SESSION_SECRET) {
 
 app.use(
   session({
+    ...(userStore
+      ? {
+          store: new PgSessionStore({
+            pool: userStore.pool,
+            createTableIfMissing: true,
+          }),
+        }
+      : {}),
     name: 'nexafunds.sid',
     secret: process.env.SESSION_SECRET || 'nexafunds-development-secret',
     resave: false,
@@ -86,8 +96,6 @@ app.use(
     },
   })
 )
-// NOTE: the default MemoryStore leaks and resets on restart.
-// For production install connect-sqlite3 and pass `store:`.
 
 // ============================================================
 // HELPERS

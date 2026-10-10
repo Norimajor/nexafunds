@@ -85,6 +85,8 @@ export const createPostgresUserStore = ({ connectionString }) => {
   }
 
   return {
+    pool,
+
     async init(legacyDb, all) {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS users (

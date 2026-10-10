@@ -18,9 +18,10 @@ a Neon database). Add its connection string to the Render API service's environm
 variables before deploying this version. Do not set it as a `VITE_*` variable or
 commit it. The API stores account emails/password hashes and EA licenses in
 PostgreSQL, and the dashboard's registered-user counter is calculated from those
-persistent account rows. A first startup imports users and EA licenses from the
-existing SQLite database when that file is available and the PostgreSQL database
-does not yet contain users.
+persistent account rows. Login sessions are stored in the same PostgreSQL database
+so a Render restart or another API instance does not sign users out. A first startup
+imports users and EA licenses from the existing SQLite database when that file is
+available and the PostgreSQL database does not yet contain users.
 
 Without `DATABASE_URL`, the production API intentionally refuses to start instead
 of silently accepting registrations into temporary storage. Other local SQLite data
