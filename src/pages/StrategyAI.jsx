@@ -68,7 +68,7 @@ const navigationTopics = [
     path: '/dashboard?section=ea-access',
     description: 'Register an MT5 account, follow verification, and access an approved EA.',
     details:
-      'Open EA access from the Dashboard sidebar. Enter your broker, exact MT5 server name, account number, and demo/live type, then confirm the IB details. NexaFunds reviews requests; after approval, your account-bound key and download appear when the EA file is available.',
+      'Open EA access from the Dashboard sidebar. Use the Pepperstone partner link to open an account under the NexaFunds IB, then select Pepperstone, enter your MT5 account number, and choose demo or live. NexaFunds verifies the exact MT5 server during review; after approval, your account-bound key and download appear when the EA file is available.',
   },
   {
     label: 'Portfolio',

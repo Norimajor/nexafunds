@@ -120,7 +120,9 @@ export const createLicenseRouter = ({
     asyncRoute(async (req, res) => {
       const licenses = await all(
         db,
-        `SELECT id, user_id, broker_name, broker_server, account_login, account_type,
+        `SELECT id, user_id, broker_name,
+                CASE WHEN broker_server LIKE 'pending-%' THEN '' ELSE broker_server END AS broker_server,
+                account_login, account_type,
                 status, created_at, approved_at
          FROM ea_licenses WHERE user_id = ? ORDER BY id DESC`,
         [req.session.user.id]
@@ -154,7 +156,6 @@ export const createLicenseRouter = ({
       if (
         !brokerName ||
         brokerName.length > 80 ||
-        !brokerServer ||
         brokerServer.length > 120 ||
         !/^\d{3,20}$/.test(accountLogin) ||
         !['demo', 'real'].includes(accountType) ||
@@ -163,7 +164,7 @@ export const createLicenseRouter = ({
         return res.status(400).json({
           success: false,
           error:
-            'Enter a broker, the exact MT5 server and account number, choose demo or live, and confirm the IB account.',
+            'Choose a broker, enter the MT5 account number, choose demo or live, and confirm the IB account.',
         })
       }
 
@@ -177,7 +178,7 @@ export const createLicenseRouter = ({
           [
             req.session.user.id,
             brokerName,
-            brokerServer,
+            brokerServer || `pending-${randomUUID()}`,
             accountLogin,
             accountType,
             'pending',
@@ -201,6 +202,9 @@ export const createLicenseRouter = ({
         license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
         license: {
           ...license,
+          broker_server: license.broker_server.startsWith('pending-')
+            ? ''
+            : license.broker_server,
           license_key:
             license.status === 'active' && process.env.LICENSE_SIGNING_SECRET
               ? signLicense(license, process.env.LICENSE_SIGNING_SECRET)
@@ -308,7 +312,9 @@ export const createLicenseRouter = ({
     asyncRoute(async (_req, res) => {
       const licenses = await all(
         db,
-        `SELECT l.id, l.broker_name, l.broker_server, l.account_login,
+        `SELECT l.id, l.broker_name,
+                CASE WHEN l.broker_server LIKE 'pending-%' THEN '' ELSE l.broker_server END AS broker_server,
+                l.account_login,
                 l.account_type, l.status, l.created_at, l.approved_at,
                 u.first_name, u.last_name, u.email
          FROM ea_licenses l JOIN users u ON u.id = l.user_id
@@ -389,10 +395,17 @@ export const createLicenseRouter = ({
     requireLicenseConfig,
     asyncRoute(async (req, res) => {
       const decision = String(req.body?.decision || '').trim().toLowerCase()
+      const brokerServer = String(req.body?.broker_server || '').trim()
       if (!['approve', 'reject'].includes(decision)) {
         return res.status(400).json({
           success: false,
           error: 'Decision must be approve or reject.',
+        })
+      }
+      if (decision === 'approve' && (!brokerServer || brokerServer.length > 120)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Enter the exact MT5 server shown in the account owner’s terminal before approving.',
         })
       }
 
@@ -400,9 +413,11 @@ export const createLicenseRouter = ({
       const result = await run(
         db,
         `UPDATE ea_licenses
-         SET status = ?, approved_at = CASE WHEN ? = 'active' THEN CURRENT_TIMESTAMP ELSE NULL END
+         SET status = ?,
+             broker_server = CASE WHEN ? = 'active' THEN ? ELSE broker_server END,
+             approved_at = CASE WHEN ? = 'active' THEN CURRENT_TIMESTAMP ELSE NULL END
          WHERE id = ? AND status = 'pending'`,
-        [status, status, req.params.licenseId]
+        [status, status, brokerServer, status, req.params.licenseId]
       )
 
       if (!result.changes) {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
+const PEPPERSTONE_IB_URL = 'https://trk.pepperstonepartners.com/aff_c?offer_id=367&aff_id=51096&source=52793&referral_source=52793&referral_provider=tune_link'
 
 const formatDate = (value) => {
   if (!value) return 'Not reviewed yet'
@@ -19,8 +20,7 @@ export default function EaAccess({ embedded = false }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [brokerName, setBrokerName] = useState('')
-  const [brokerServer, setBrokerServer] = useState('')
+  const [brokerName, setBrokerName] = useState('Pepperstone')
   const [accountLogin, setAccountLogin] = useState('')
   const [accountType, setAccountType] = useState('demo')
   const [ibConfirmation, setIbConfirmation] = useState(false)
@@ -105,7 +105,6 @@ export default function EaAccess({ embedded = false }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           broker_name: brokerName.trim(),
-          broker_server: brokerServer.trim(),
           account_login: accountLogin.trim(),
           account_type: accountType,
           ib_confirmation: ibConfirmation,
@@ -120,8 +119,6 @@ export default function EaAccess({ embedded = false }) {
       setNotice(data.license_configured
         ? 'Your MT5 account is submitted for verification. We will issue your account-bound key after approval.'
         : 'Your MT5 account is submitted and will be queued for review. Key issuance is temporarily unavailable while NexaFunds configures licensing.')
-      setBrokerName('')
-      setBrokerServer('')
       setAccountLogin('')
       setIbConfirmation(false)
       await loadLicenses()
@@ -197,13 +194,26 @@ export default function EaAccess({ embedded = false }) {
       )}
 
       <div className={embedded ? 'nf-workspace-main nf-workspace-embedded' : 'nf-workspace-main'}>
+        <aside className="nf-ib-referral" aria-labelledby="nf-ib-referral-heading">
+          <div>
+            <span className="nf-ib-referral-label">NEXAFUNDS INTRODUCING BROKER</span>
+            <h2 id="nf-ib-referral-heading">New to Pepperstone? Open your account through our partner link.</h2>
+            <p>
+              Use the NexaFunds Pepperstone link when creating your trading account so it can be associated with our Introducing Broker (IB). Once your MT5 account is ready, register the account number below. We’ll verify the exact MT5 server during review before issuing an account-bound EA key.
+            </p>
+          </div>
+          <a href={PEPPERSTONE_IB_URL} target="_blank" rel="noopener noreferrer">
+            Open a Pepperstone account <span aria-hidden="true">↗</span>
+          </a>
+        </aside>
+
         <div className="nf-workspace-heading">
           <span className="nf-eyebrow">{embedded ? 'MT5 LICENSE CENTER' : 'YOUR MT5 ACCESS'}</span>
           <h1>{embedded ? 'EA account access' : 'Connect your trading account.'}</h1>
           <p>
             {embedded
-              ? 'Register an MT5 account, review its license, and get your account-bound EA key.'
-              : 'Register the exact MT5 account you opened under our IB. Each request is reviewed before an account-bound key is issued.'}
+              ? 'Register your Pepperstone MT5 account, follow its verification, and get your account-bound EA key.'
+              : 'Register the Pepperstone MT5 account you opened through our IB partner link. Each request is reviewed before an account-bound key is issued.'}
           </p>
         </div>
 
@@ -219,16 +229,14 @@ export default function EaAccess({ embedded = false }) {
           <section className="nf-panel nf-request-panel">
             <div className="nf-panel-heading">
               <span className="nf-step-number">01</span>
-              <div><h2>Register an MT5 account</h2><p>Use the server name exactly as shown in MetaTrader 5.</p></div>
+              <div><h2>Register an MT5 account</h2><p>Enter the account number for your Pepperstone MT5 account. We’ll confirm its server during review.</p></div>
             </div>
             <form className="nf-license-form" onSubmit={handleSubmit}>
               <label className="nf-form-field">
                 <span>Broker</span>
-                <input value={brokerName} onChange={(event) => setBrokerName(event.target.value)} placeholder="Broker name" maxLength={80} required />
-              </label>
-              <label className="nf-form-field">
-                <span>MT5 server</span>
-                <input value={brokerServer} onChange={(event) => setBrokerServer(event.target.value)} placeholder="e.g. Broker-Live 01" maxLength={120} required />
+                <select className="nf-broker-select" value={brokerName} onChange={(event) => setBrokerName(event.target.value)} required>
+                  <option value="Pepperstone">Pepperstone · NexaFunds IB</option>
+                </select>
               </label>
               <label className="nf-form-field">
                 <span>MT5 account number</span>
@@ -236,11 +244,11 @@ export default function EaAccess({ embedded = false }) {
               </label>
               <fieldset className="nf-account-type">
                 <legend>Account type</legend>
-                <label className={accountType === 'demo' ? 'nf-choice nf-choice-active' : 'nf-choice'}>
+                <label className={`nf-choice nf-choice-demo${accountType === 'demo' ? ' nf-choice-demo-active' : ''}`}>
                   <input type="radio" name="account-type" value="demo" checked={accountType === 'demo'} onChange={() => setAccountType('demo')} />
                   <span><strong>Demo</strong><small>Verification required</small></span>
                 </label>
-                <label className={accountType === 'real' ? 'nf-choice nf-choice-active' : 'nf-choice'}>
+                <label className={`nf-choice nf-choice-live${accountType === 'real' ? ' nf-choice-live-active' : ''}`}>
                   <input type="radio" name="account-type" value="real" checked={accountType === 'real'} onChange={() => setAccountType('real')} />
                   <span><strong>Live</strong><small>Verification required</small></span>
                 </label>
@@ -271,7 +279,7 @@ export default function EaAccess({ embedded = false }) {
                       <div><strong>{license.broker_name}</strong><span>{license.account_login} · {license.account_type === 'demo' ? 'Demo' : 'Live'} account</span></div>
                       <span className={`nf-status nf-status-${license.status}`}>{license.status === 'active' ? 'Approved' : license.status === 'pending' ? 'In review' : 'Not approved'}</span>
                     </div>
-                    <p className="nf-license-server">{license.broker_server}</p>
+                    {license.broker_server && <p className="nf-license-server">{license.broker_server}</p>}
                     {license.status === 'pending' && <p className="nf-review-note">Your IB account is waiting for review. Submitted {formatDate(license.created_at)}.</p>}
                     {license.status === 'rejected' && <p className="nf-review-note">This account was not approved. Please contact NexaFunds support if you think this is a mistake.</p>}
                     {license.status === 'active' && license.license_key && (

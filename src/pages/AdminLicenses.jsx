@@ -90,7 +90,10 @@ export default function AdminLicenses() {
       const response = await fetch(`${API_BASE}/api/admin/licenses/${licenseId}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ decision }),
+        body: JSON.stringify({
+          decision,
+          broker_server: licenses.find((license) => license.id === licenseId)?.broker_server?.trim(),
+        }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
@@ -175,11 +178,26 @@ export default function AdminLicenses() {
                       <span className={`nf-status nf-status-${license.status}`}>{license.status === 'active' ? 'Approved' : license.status === 'pending' ? 'Needs review' : 'Not approved'}</span>
                     </div>
                     <p className="nf-admin-account">{license.broker_name} · {license.account_login} · {license.account_type === 'demo' ? 'Demo' : 'Live'}</p>
-                    <p className="nf-license-server">MT5 server: {license.broker_server}</p>
+                    {license.status === 'pending' ? (
+                      <label className="nf-form-field nf-admin-server-field">
+                        <span>Exact MT5 server (required to approve)</span>
+                        <input
+                          value={license.broker_server || ''}
+                          onChange={(event) => setLicenses((current) => current.map((entry) => (
+                            entry.id === license.id ? { ...entry, broker_server: event.target.value } : entry
+                          )))}
+                          placeholder="e.g. Pepperstone-EdgeXX"
+                          maxLength={120}
+                          required
+                        />
+                      </label>
+                    ) : (
+                      <p className="nf-license-server">MT5 server: {license.broker_server}</p>
+                    )}
                     <p className="nf-review-note">Submitted {license.created_at}</p>
                     {license.status === 'pending' && (
                       <div className="nf-admin-actions">
-                        <button className="nf-primary" type="button" disabled={busyId === license.id || !signingConfigured} onClick={() => handleDecision(license.id, 'approve')}>{busyId === license.id ? 'Updating…' : 'Verify & approve'}</button>
+                        <button className="nf-primary" type="button" disabled={busyId === license.id || !signingConfigured || !license.broker_server?.trim()} onClick={() => handleDecision(license.id, 'approve')}>{busyId === license.id ? 'Updating…' : 'Verify & approve'}</button>
                         <button className="nf-secondary" type="button" disabled={busyId === license.id} onClick={() => handleDecision(license.id, 'reject')}>Reject request</button>
                       </div>
                     )}
