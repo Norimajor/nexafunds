@@ -201,6 +201,28 @@ export const createPostgresUserStore = ({ connectionString }) => {
       return pool.query(toPostgresSql(sql), params).then((result) => result.rows)
     },
 
+    async transaction(callback) {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const execute = async (sql, params = []) => {
+          const result = await client.query(toPostgresSql(sql), params)
+          return {
+            lastID: result.rows[0]?.id,
+            changes: result.rowCount,
+          }
+        }
+        const result = await callback(execute)
+        await client.query('COMMIT')
+        return result
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
     importSnapshot,
 
     close() {

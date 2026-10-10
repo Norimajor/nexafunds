@@ -1,15 +1,21 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import VerifyEmail from './pages/VerifyEmail'
 import EaAccess from './pages/EaAccess'
+import EaDownloads from './pages/EaDownloads'
 import AdminLicenses from './pages/AdminLicenses'
 import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
 import Transactions from './pages/Transactions'
 import StrategyAI from './pages/StrategyAI'
+
+function LegacyEaDownloadRedirect() {
+  const { licenseId } = useParams()
+  return <Navigate to={`/ea-downloads?licenseId=${encodeURIComponent(licenseId)}`} replace />
+}
 
 export default function App() {
   return (
@@ -20,7 +26,8 @@ export default function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/ea-access" element={<EaAccess />} />
-        <Route path="/ea-download/:licenseId" element={<Navigate to="/dashboard?section=ea-access" replace />} />
+        <Route path="/ea-downloads" element={<EaDownloads />} />
+        <Route path="/ea-download/:licenseId" element={<LegacyEaDownloadRedirect />} />
         <Route path="/admin/licenses" element={<AdminLicenses />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/portfolio" element={<Portfolio />} />

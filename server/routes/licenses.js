@@ -6,6 +6,13 @@ const normalizeAccountType = (value) => String(value || '').trim().toLowerCase()
 
 const createLicenseKey = () => `NEXA-AI-${randomBytes(16).toString('hex').toUpperCase()}`
 const isValidProductId = (productId) => /^[a-z0-9][a-z0-9-]{1,47}$/.test(productId)
+const EA_PRODUCTS = [
+  { product_id: 'nexa-ai-pro', name: 'NexaFunds AI Pro' },
+  { product_id: 'nexa-ml', name: 'Nexa ML EA' },
+]
+
+const getEaProduct = (productId) =>
+  EA_PRODUCTS.find((product) => product.product_id === productId)
 
 const ensureProductLicenseKeys = async (db, licenseId, { all, run }) => {
   const products = await all(db, 'SELECT product_id FROM ea_products')
@@ -33,6 +40,7 @@ export const createLicenseRouter = ({
   run,
   get,
   all,
+  transaction,
   asyncRoute,
   fs,
   path,
@@ -387,18 +395,17 @@ export const createLicenseRouter = ({
       res.json({
         success: true,
         license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
-        products: products.map((product) => ({
-          product_id: product.product_id,
-          name: product.name,
-          file_name: product.file_name,
-          created_at: product.created_at,
-          download_available: isAvailableProduct(
-            fs,
-            path,
-            process.env.EA_DOWNLOAD_PATH,
-            product
-          ),
-        })),
+        products: EA_PRODUCTS.map((slot) => {
+          const product = products.find((entry) => entry.product_id === slot.product_id)
+          return {
+            ...slot,
+            file_name: product?.file_name || null,
+            created_at: product?.created_at || null,
+            download_available: product
+              ? isAvailableProduct(fs, path, process.env.EA_DOWNLOAD_PATH, product)
+              : false,
+          }
+        }),
       })
     })
   )
@@ -413,7 +420,7 @@ export const createLicenseRouter = ({
       }
 
       const productId = String(req.body?.product_id || '').trim().toLowerCase()
-      const name = String(req.body?.name || '').trim()
+      const product = getEaProduct(productId)
       const root = uploadRoot()
       const originalName = path
         .basename(String(req.file.originalname || '').replace(/[\\/]/g, '/'))
@@ -424,13 +431,13 @@ export const createLicenseRouter = ({
         })
         .join('')
         .trim()
-      if (!isValidProductId(productId) || !name || name.length > 80 || !originalName || !root) {
+      if (!product || !originalName || !root) {
         await fs.promises.unlink(req.file.path).catch((error) => {
           if (error.code !== 'ENOENT') console.error('Unable to remove invalid EA product upload:', error)
         })
         return res.status(400).json({
           success: false,
-          error: 'Provide a valid product ID, EA name, .ex5 file, and EA_DOWNLOAD_PATH storage root.',
+          error: 'Choose one of the supported EA products and upload a compiled .ex5 file.',
         })
       }
 
@@ -456,7 +463,7 @@ export const createLicenseRouter = ({
              name = excluded.name,
              file_name = excluded.file_name,
              storage_name = excluded.storage_name`,
-          [productId, name, originalName, storageName]
+          [productId, product.name, originalName, storageName]
         )
         if (process.env.LICENSE_SIGNING_SECRET) {
           const activeLicenses = await all(db, "SELECT id FROM ea_licenses WHERE status = 'active'")
@@ -490,11 +497,69 @@ export const createLicenseRouter = ({
         success: true,
         product: {
           product_id: productId,
-          name,
+          name: product.name,
           file_name: originalName,
           download_available: true,
         },
       })
+    })
+  )
+
+  router.delete(
+    '/admin/products/:productId',
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      const productId = String(req.params.productId || '').trim().toLowerCase()
+      const productDefinition = getEaProduct(productId)
+      if (!productDefinition) {
+        return res.status(404).json({ success: false, error: 'EA product not found.' })
+      }
+
+      const product = await get(db, 'SELECT product_id FROM ea_products WHERE product_id = ?', [productId])
+      if (!product) {
+        return res.status(404).json({ success: false, error: 'EA product not found.' })
+      }
+
+      const root = uploadRoot()
+      const resolvedRoot = root ? path.resolve(root) : null
+      const resolvedFile = resolvedRoot ? path.resolve(resolvedRoot, `${productId}.ex5`) : null
+      const backupFile = resolvedFile ? `${resolvedFile}.${randomUUID()}.delete` : null
+      let backupCreated = false
+      if (resolvedFile && path.dirname(resolvedFile) === resolvedRoot) {
+        try {
+          await fs.promises.rename(resolvedFile, backupFile)
+          backupCreated = true
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error
+        }
+      }
+
+      try {
+        await transaction(db, async (execute) => {
+          await execute('DELETE FROM ea_product_licenses WHERE product_id = ?', [productId])
+          await execute('DELETE FROM ea_products WHERE product_id = ?', [productId])
+        })
+      } catch (error) {
+        if (backupCreated) {
+          await fs.promises.rename(backupFile, resolvedFile).catch((restoreError) => {
+            console.error('Unable to restore EA product file after deletion failed:', restoreError)
+          })
+        }
+        throw error
+      }
+
+      let warning
+      if (backupCreated) {
+        try {
+          await fs.promises.unlink(backupFile)
+        } catch (error) {
+          if (error.code !== 'ENOENT') {
+            console.error('Unable to remove revoked EA product file:', error)
+            warning = 'The product keys were revoked, but the old EA file could not be removed from storage.'
+          }
+        }
+      }
+      res.json({ success: true, product_id: productId, warning })
     })
   )
 
@@ -503,7 +568,7 @@ export const createLicenseRouter = ({
     requireAdmin,
     (_req, res) => res.status(410).json({
       success: false,
-      error: 'Use /api/admin/products/upload with an EA product ID and display name.',
+      error: 'Use /api/admin/products/upload with one of the fixed NexaFunds EA product slots.',
     })
   )
 

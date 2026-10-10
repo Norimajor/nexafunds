@@ -46,11 +46,13 @@ EA_DOWNLOAD_PATH=<absolute path to the compiled .ex5 file>
 ```
 
 The administrator opens `/admin/licenses` and supplies `ADMIN_API_KEY` to review
-requests and upload compiled `.ex5` files. Each product needs a stable product ID
-(lowercase letters, numbers, and hyphens) and display name. `EA_DOWNLOAD_PATH` must
-point to a `.ex5` path on the API server; uploads are stored in that file's directory
-as `<product-id>.ex5`. On hosts such as Render, attach a persistent disk and point
-`EA_DOWNLOAD_PATH` into its mount path so product files survive deploys and restarts.
+requests and upload compiled `.ex5` files. The page has two fixed product slots:
+`nexa-ai-pro` for NexaFunds AI Pro and `nexa-ml` for Nexa ML EA. Replacing a build
+in its slot preserves that product's account keys; deleting it removes the binary
+and revokes that product's keys. `EA_DOWNLOAD_PATH` must point to a `.ex5` path on
+the API server; uploads are stored in that file's directory as `<product-id>.ex5`.
+On hosts such as Render, attach a persistent disk and point `EA_DOWNLOAD_PATH` into
+its mount path so product files survive deploys and restarts.
 
 Clients can submit requests while `LICENSE_SIGNING_SECRET` is missing, but the
 administrator cannot approve requests or issue keys until it is set. Configure a
@@ -59,12 +61,16 @@ Render's service environment variables), then restart/redeploy the API. Do not p
 in frontend `VITE_*` variables. Never expose these values through `VITE_*`
 variables or commit real secrets.
 
-Do not expose these values through `VITE_*` variables or commit real secrets. Each
-EA download is served only to an authenticated owner of an active account license
-and a product-specific entitlement. The source snapshots in
+Do not expose these values through `VITE_*` variables or commit real secrets.
+Approved account keys and matching EA downloads are available on the authenticated
+`/ea-downloads` page, separate from account registration at `/ea-access`. Each EA
+download is served only to an authenticated owner of an active account license and
+a product-specific entitlement. The source snapshots in
 `C:\Users\USER\NEXA-FUNDS-AI` are not downloadable EA binaries.
 
-The MQL5 EA must validate its input key before enabling trading. Add the NexaFunds
+The MQL5 EA validates its input key before enabling trading. If the online check
+fails or is unavailable, the EA stays attached to the chart and keeps new trades
+disabled while retrying validation periodically. Add the NexaFunds
 backend origin to MetaTrader's **Tools → Options → Expert Advisors → Allow
 WebRequest for listed URL** settings, then POST the following JSON to
 `/api/licenses/validate` over HTTPS:

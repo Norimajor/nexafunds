@@ -139,6 +139,26 @@ const all = (database, sql, params = []) => {
   })
 }
 
+const transaction = async (database, callback) => {
+  if (userStore && database === userStore) {
+    return userStore.transaction(callback)
+  }
+
+  await run(database, 'BEGIN IMMEDIATE')
+  try {
+    const result = await callback((sql, params = []) => run(database, sql, params))
+    await run(database, 'COMMIT')
+    return result
+  } catch (error) {
+    try {
+      await run(database, 'ROLLBACK')
+    } catch (rollbackError) {
+      console.error('Unable to roll back account-store transaction:', rollbackError)
+    }
+    throw error
+  }
+}
+
 const asyncRoute = (handler) => (req, res) =>
   Promise.resolve(handler(req, res)).catch((error) => {
     console.error(`${req.method} ${req.path} failed:`, error)
@@ -914,6 +934,7 @@ app.use(
     run,
     get,
     all,
+    transaction,
     asyncRoute,
     fs,
     path,

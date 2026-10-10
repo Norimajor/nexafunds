@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { getDownloadFilename } from '../utils/eaDownload'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
 const PEPPERSTONE_IB_URL = 'https://trk.pepperstonepartners.com/aff_c?offer_id=367&aff_id=51096&source=52793&referral_source=52793&referral_provider=tune_link'
@@ -18,8 +17,6 @@ export default function EaAccess({ embedded = false }) {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [licenses, setLicenses] = useState([])
-  const [products, setProducts] = useState([])
-  const [productLicenses, setProductLicenses] = useState([])
   const [licenseConfigured, setLicenseConfigured] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -44,8 +41,6 @@ export default function EaAccess({ embedded = false }) {
       throw new Error(data.error || 'Unable to load your EA access.')
     }
     setLicenses(data.licenses || [])
-    setProducts(data.products || [])
-    setProductLicenses(data.product_licenses || [])
     setLicenseConfigured(Boolean(data.license_configured))
     return true
   }, [navigate])
@@ -132,39 +127,6 @@ export default function EaAccess({ embedded = false }) {
     }
   }
 
-  const handleCopy = async (licenseKey) => {
-    try {
-      await navigator.clipboard.writeText(licenseKey)
-      setNotice('License key copied.')
-    } catch (copyError) {
-      console.error('Unable to copy EA license key:', copyError)
-      setError('Could not copy the key. Select and copy it manually.')
-    }
-  }
-
-  const handleDownload = async (licenseId, productId) => {
-    setError('')
-    try {
-      const response = await fetch(`${API_BASE}/api/ea/download/${licenseId}/${productId}`, {
-        credentials: 'include',
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'The EA download is unavailable.')
-      }
-      const downloadUrl = URL.createObjectURL(await response.blob())
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = getDownloadFilename(response.headers.get('Content-Disposition'))
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000)
-    } catch (downloadError) {
-      setError(downloadError.message || 'The EA download is unavailable.')
-    }
-  }
-
   const handleLogout = async () => {
     try {
       const response = await fetch(`${API_BASE}/api/logout`, {
@@ -235,8 +197,8 @@ export default function EaAccess({ embedded = false }) {
           <h1>{embedded ? 'EA account access' : 'Connect your trading account.'}</h1>
           <p>
             {embedded
-              ? 'Register your MT5 account, follow its verification, and get your account-bound EA key.'
-              : 'Register a demo or live MT5 account. Live accounts must be opened through one of our IB partner links. Each request is reviewed before an account-bound key is issued.'}
+              ? 'Register your MT5 account and follow its verification. After approval, open the download center for its EA keys and files.'
+              : 'Register a demo or live MT5 account. Live accounts must be opened through one of our IB partner links. After approval, find its keys and EA files in the download center.'}
           </p>
         </div>
 
@@ -317,33 +279,15 @@ export default function EaAccess({ embedded = false }) {
                     {license.status === 'pending' && <p className="nf-review-note">Your IB account is waiting for review. Submitted {formatDate(license.created_at)}.</p>}
                     {license.status === 'rejected' && <p className="nf-review-note">This account was not approved. Please contact NexaFunds support if you think this is a mistake.</p>}
                     {license.status === 'active' && (
-                      <div className="nf-issued-key">
-                        {products.length === 0 ? (
-                          <p className="nf-download-note">EA downloads and product keys will appear here when products are published.</p>
-                        ) : products.map((product) => {
-                          const key = productLicenses.find((entry) =>
-                            String(entry.license_id) === String(license.id) &&
-                            entry.product_id === product.product_id
-                          )
-                          return (
-                            <div className="nf-product-license" key={product.product_id}>
-                              <span>{product.name}</span>
-                              {key ? (
-                                <>
-                                  <code>{key.license_key}</code>
-                                  <button className="nf-secondary nf-copy-button" type="button" onClick={() => handleCopy(key.license_key)}>Copy key</button>
-                                  {product.download_available ? (
-                                    <button className="nf-primary nf-download-button" type="button" onClick={() => handleDownload(license.id, product.product_id)}>Download EA</button>
-                                  ) : (
-                                    <p className="nf-download-note">The EA file is not currently available.</p>
-                                  )}
-                                </>
-                              ) : (
-                                <p className="nf-download-note">A product key is not available for this account.</p>
-                              )}
-                            </div>
-                          )
-                        })}
+                      <div className="nf-account-download-action">
+                        <p>Your product keys and EA downloads are organized in your private download center.</p>
+                        <button
+                          className="nf-primary"
+                          type="button"
+                          onClick={() => navigate(`/ea-downloads?licenseId=${encodeURIComponent(license.id)}`)}
+                        >
+                          Open download center <span aria-hidden="true">↗</span>
+                        </button>
                       </div>
                     )}
                   </article>

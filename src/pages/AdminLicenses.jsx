@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
 const ADMIN_KEY_STORAGE = 'nexafunds.admin-api-key'
+const EA_PRODUCTS = [
+  { product_id: 'nexa-ai-pro', name: 'NexaFunds AI Pro', source: 'EA.txt' },
+  { product_id: 'nexa-ml', name: 'Nexa ML EA', source: 'EA.TXT2' },
+]
 
 const readSavedAdminKey = () => window.localStorage.getItem(ADMIN_KEY_STORAGE) || ''
 
@@ -13,11 +17,10 @@ export default function AdminLicenses() {
   const [hasSavedAdminKey, setHasSavedAdminKey] = useState(() => Boolean(readSavedAdminKey()))
   const [licenses, setLicenses] = useState([])
   const [products, setProducts] = useState([])
-  const [productId, setProductId] = useState('')
-  const [productName, setProductName] = useState('')
   const [signingConfigured, setSigningConfigured] = useState(false)
-  const [uploadFile, setUploadFile] = useState(null)
-  const [uploading, setUploading] = useState(false)
+  const [uploadFiles, setUploadFiles] = useState({})
+  const [uploadingProduct, setUploadingProduct] = useState(null)
+  const [deletingProduct, setDeletingProduct] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState(null)
@@ -77,21 +80,21 @@ export default function AdminLicenses() {
     }
   }
 
-  const handleUpload = async (event) => {
+  const handleUpload = async (event, product) => {
     event.preventDefault()
     const form = event.currentTarget
+    const uploadFile = uploadFiles[product.product_id]
     if (!uploadFile) {
       setError('Choose a compiled .ex5 file first.')
       return
     }
 
     setError('')
-    setUploading(true)
+    setUploadingProduct(product.product_id)
     try {
       const formData = new FormData()
       formData.append('ea_file', uploadFile)
-      formData.append('product_id', productId.trim().toLowerCase())
-      formData.append('name', productName.trim())
+      formData.append('product_id', product.product_id)
       const response = await fetch(`${API_BASE}/api/admin/products/upload`, {
         method: 'POST',
         headers: { 'x-admin-key': adminKey },
@@ -102,18 +105,47 @@ export default function AdminLicenses() {
         throw new Error(data.error || 'Unable to upload the EA.')
       }
 
-      setProducts((current) => [
-        ...current.filter((product) => product.product_id !== data.product.product_id),
-        data.product,
-      ])
-      setProductId('')
-      setProductName('')
-      setUploadFile(null)
+      setProducts((current) => current.map((entry) => (
+        entry.product_id === data.product.product_id ? data.product : entry
+      )))
+      setUploadFiles((current) => ({ ...current, [product.product_id]: null }))
       form.reset()
     } catch (uploadError) {
       setError(uploadError.message || 'Unable to upload the EA.')
     } finally {
-      setUploading(false)
+      setUploadingProduct(null)
+    }
+  }
+
+  const handleDeleteProduct = async (product) => {
+    if (!window.confirm(`Delete ${product.name} and permanently revoke all keys for this EA?`)) return
+    setError('')
+    setDeletingProduct(product.product_id)
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/products/${product.product_id}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-key': adminKey },
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Unable to delete the EA product.')
+      }
+      setProducts((current) => current.map((entry) => (
+        entry.product_id === product.product_id
+          ? { ...entry, file_name: null, created_at: null, download_available: false }
+          : entry
+      )))
+      setError(data.warning || '')
+      setLicenses((current) => current.map((license) => ({
+        ...license,
+        product_licenses: (license.product_licenses || []).filter(
+          (key) => key.product_id !== product.product_id
+        ),
+      })))
+    } catch (deleteError) {
+      setError(deleteError.message || 'Unable to delete the EA product.')
+    } finally {
+      setDeletingProduct(null)
     }
   }
 
@@ -198,49 +230,54 @@ export default function AdminLicenses() {
                 <p>Upload each compiled EA separately. Accounts automatically receive a distinct key for each EA.</p>
               </div>
             </div>
-            <form className="nf-license-form" onSubmit={handleUpload}>
-              <label className="nf-form-field">
-                <span>Product ID (must match the EA build)</span>
-                <input
-                  value={productId}
-                  onChange={(event) => setProductId(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                  placeholder="e.g. nexa-ai-pro"
-                  pattern="[a-z0-9][a-z0-9-]{1,47}"
-                  maxLength={48}
-                  required
-                />
-              </label>
-              <label className="nf-form-field">
-                <span>EA display name</span>
-                <input value={productName} onChange={(event) => setProductName(event.target.value)} placeholder="e.g. Nexa AI Pro" maxLength={80} required />
-              </label>
-              <label className="nf-form-field">
-                <span>Compiled MetaTrader EA (.ex5, up to 100 MB)</span>
-                <input
-                  type="file"
-                  accept=".ex5,application/octet-stream"
-                  onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
-                  required
-                />
-              </label>
-              <button className="nf-primary nf-submit-button" type="submit" disabled={uploading}>
-                {uploading ? 'Uploading EA…' : 'Upload or replace EA'}
-              </button>
-            </form>
-            {products.length > 0 && (
-              <div className="nf-license-list mt-5">
-                {products.map((product) => (
-                  <article className="nf-license-card" key={product.product_id}>
+            <div className="nf-ea-product-grid">
+              {EA_PRODUCTS.map((product) => {
+                const uploadedProduct = products.find((entry) => entry.product_id === product.product_id)
+                const uploading = uploadingProduct === product.product_id
+                const deleting = deletingProduct === product.product_id
+                return (
+                  <section className="nf-panel nf-ea-product-slot" key={product.product_id}>
                     <div className="nf-license-card-heading">
-                      <div><strong>{product.name}</strong><span>{product.product_id} · {product.file_name}</span></div>
-                      <span className={`nf-status ${product.download_available ? 'nf-status-active' : 'nf-status-pending'}`}>
-                        {product.download_available ? 'Available' : 'File missing'}
+                      <div>
+                        <strong>{product.name}</strong>
+                        <span>{product.product_id} · build from {product.source}</span>
+                      </div>
+                      <span className={`nf-status ${uploadedProduct?.download_available ? 'nf-status-active' : 'nf-status-pending'}`}>
+                        {uploadedProduct?.download_available ? 'Available' : uploadedProduct?.file_name ? 'File missing' : 'Not uploaded'}
                       </span>
                     </div>
-                  </article>
-                ))}
-              </div>
-            )}
+                    {uploadedProduct?.file_name && <p className="nf-license-server">Uploaded file: {uploadedProduct.file_name}</p>}
+                    <form className="nf-license-form" onSubmit={(event) => handleUpload(event, product)}>
+                      <label className="nf-form-field">
+                        <span>Compiled EA (.ex5, up to 100 MB)</span>
+                        <input
+                          type="file"
+                          accept=".ex5,application/octet-stream"
+                          onChange={(event) => setUploadFiles((current) => ({
+                            ...current,
+                            [product.product_id]: event.target.files?.[0] || null,
+                          }))}
+                          required
+                        />
+                      </label>
+                      <button className="nf-primary nf-submit-button" type="submit" disabled={uploading || deleting}>
+                        {uploading ? 'Uploading…' : uploadedProduct?.download_available ? 'Replace this EA' : 'Upload this EA'}
+                      </button>
+                      {uploadedProduct?.file_name && (
+                        <button
+                          className="nf-secondary nf-ea-delete-button"
+                          type="button"
+                          onClick={() => handleDeleteProduct(product)}
+                          disabled={uploading || deleting}
+                        >
+                          {deleting ? 'Deleting…' : 'Delete EA and revoke its keys'}
+                        </button>
+                      )}
+                    </form>
+                  </section>
+                )
+              })}
+            </div>
             {!signingConfigured && (
               <p className="nf-form-error nf-page-message mt-5" role="alert">
                 License issuance is disabled until LICENSE_SIGNING_SECRET is configured in the API hosting environment and the server is restarted.
