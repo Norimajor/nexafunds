@@ -18,7 +18,8 @@ export default function EaAccess({ embedded = false }) {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [licenses, setLicenses] = useState([])
-  const [downloadAvailable, setDownloadAvailable] = useState(false)
+  const [products, setProducts] = useState([])
+  const [productLicenses, setProductLicenses] = useState([])
   const [licenseConfigured, setLicenseConfigured] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -43,12 +44,9 @@ export default function EaAccess({ embedded = false }) {
       throw new Error(data.error || 'Unable to load your EA access.')
     }
     setLicenses(data.licenses || [])
-    setDownloadAvailable(Boolean(data.download_available))
+    setProducts(data.products || [])
+    setProductLicenses(data.product_licenses || [])
     setLicenseConfigured(Boolean(data.license_configured))
-    const approvedLicense = (data.licenses || []).find((license) => license.status === 'active' && license.license_key)
-    if (approvedLicense && data.download_available) {
-      navigate(`/ea-download/${approvedLicense.id}`)
-    }
     return true
   }, [navigate])
 
@@ -144,10 +142,10 @@ export default function EaAccess({ embedded = false }) {
     }
   }
 
-  const handleDownload = async (licenseId) => {
+  const handleDownload = async (licenseId, productId) => {
     setError('')
     try {
-      const response = await fetch(`${API_BASE}/api/ea/download/${licenseId}`, {
+      const response = await fetch(`${API_BASE}/api/ea/download/${licenseId}/${productId}`, {
         credentials: 'include',
       })
       if (!response.ok) {
@@ -318,16 +316,34 @@ export default function EaAccess({ embedded = false }) {
                     {license.broker_server && <p className="nf-license-server">{license.broker_server}</p>}
                     {license.status === 'pending' && <p className="nf-review-note">Your IB account is waiting for review. Submitted {formatDate(license.created_at)}.</p>}
                     {license.status === 'rejected' && <p className="nf-review-note">This account was not approved. Please contact NexaFunds support if you think this is a mistake.</p>}
-                    {license.status === 'active' && license.license_key && (
+                    {license.status === 'active' && (
                       <div className="nf-issued-key">
-                        <span>Your account-bound key</span>
-                        <code>{license.license_key}</code>
-                        <button className="nf-secondary nf-copy-button" type="button" onClick={() => handleCopy(license.license_key)}>Copy key</button>
-                        {downloadAvailable ? (
-                          <button className="nf-primary nf-download-button" type="button" onClick={() => handleDownload(license.id)}>Download MT5 EA</button>
-                        ) : (
-                          <p className="nf-download-note">The compiled EA download will be available here when it is published.</p>
-                        )}
+                        {products.length === 0 ? (
+                          <p className="nf-download-note">EA downloads and product keys will appear here when products are published.</p>
+                        ) : products.map((product) => {
+                          const key = productLicenses.find((entry) =>
+                            String(entry.license_id) === String(license.id) &&
+                            entry.product_id === product.product_id
+                          )
+                          return (
+                            <div className="nf-product-license" key={product.product_id}>
+                              <span>{product.name}</span>
+                              {key ? (
+                                <>
+                                  <code>{key.license_key}</code>
+                                  <button className="nf-secondary nf-copy-button" type="button" onClick={() => handleCopy(key.license_key)}>Copy key</button>
+                                  {product.download_available ? (
+                                    <button className="nf-primary nf-download-button" type="button" onClick={() => handleDownload(license.id, product.product_id)}>Download EA</button>
+                                  ) : (
+                                    <p className="nf-download-note">The EA file is not currently available.</p>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="nf-download-note">A product key is not available for this account.</p>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </article>

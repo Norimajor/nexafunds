@@ -129,6 +129,30 @@ export const createPostgresUserStore = ({ connectionString }) => {
         ON ea_licenses(license_key) WHERE license_key IS NOT NULL
       `)
       await pool.query(`
+        CREATE TABLE IF NOT EXISTS ea_products (
+          product_id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          file_name TEXT NOT NULL,
+          storage_name TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT TO_CHAR(
+            CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
+            'YYYY-MM-DD HH24:MI:SS'
+          )
+        )
+      `)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ea_product_licenses (
+          license_id BIGINT NOT NULL REFERENCES ea_licenses(id) ON DELETE CASCADE,
+          product_id TEXT NOT NULL REFERENCES ea_products(product_id) ON DELETE CASCADE,
+          license_key TEXT NOT NULL UNIQUE,
+          created_at TEXT NOT NULL DEFAULT TO_CHAR(
+            CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
+            'YYYY-MM-DD HH24:MI:SS'
+          ),
+          PRIMARY KEY (license_id, product_id)
+        )
+      `)
+      await pool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS ea_licenses_account_unique
         ON ea_licenses(account_login, LOWER(broker_server))
       `)

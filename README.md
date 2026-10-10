@@ -34,9 +34,8 @@ registered-user count survive API restarts and redeploys.
 After creating an account, clients register their broker, exact MT5 server, account
 number, and demo/live account type at `/ea-access`. All requests remain pending
 until an administrator verifies them in `/admin/licenses`. Approved clients receive
-a signed key and can download the uploaded EA from their account. The account number
-and server are unique across submissions; each active license is bound to that
-account and its demo/live mode.
+a different random key for every uploaded EA product. Every product key is bound to
+the approved MT5 account, broker server, and demo/live mode.
 
 Configure these backend-only environment variables on the NexaFunds API service:
 
@@ -47,9 +46,11 @@ EA_DOWNLOAD_PATH=<absolute path to the compiled .ex5 file>
 ```
 
 The administrator opens `/admin/licenses` and supplies `ADMIN_API_KEY` to review
-requests and upload the compiled `.ex5` file. `EA_DOWNLOAD_PATH` must point to a
-writable `.ex5` file on the API server. On hosts such as Render, attach a persistent
-disk and place the file under its mount path so it survives deploys and restarts.
+requests and upload compiled `.ex5` files. Each product needs a stable product ID
+(lowercase letters, numbers, and hyphens) and display name. `EA_DOWNLOAD_PATH` must
+point to a `.ex5` path on the API server; uploads are stored in that file's directory
+as `<product-id>.ex5`. On hosts such as Render, attach a persistent disk and point
+`EA_DOWNLOAD_PATH` into its mount path so product files survive deploys and restarts.
 
 Clients can submit requests while `LICENSE_SIGNING_SECRET` is missing, but the
 administrator cannot approve requests or issue keys until it is set. Configure a
@@ -58,9 +59,9 @@ Render's service environment variables), then restart/redeploy the API. Do not p
 in frontend `VITE_*` variables. Never expose these values through `VITE_*`
 variables or commit real secrets.
 
-Do not expose these values through `VITE_*` variables or commit real secrets. The
-EA download route serves only the configured compiled `.ex5` file, and only to an
-authenticated owner of an active license. The source snapshots in
+Do not expose these values through `VITE_*` variables or commit real secrets. Each
+EA download is served only to an authenticated owner of an active account license
+and a product-specific entitlement. The source snapshots in
 `C:\Users\USER\NEXA-FUNDS-AI` are not downloadable EA binaries.
 
 The MQL5 EA must validate its input key before enabling trading. Add the NexaFunds
@@ -70,6 +71,7 @@ WebRequest for listed URL** settings, then POST the following JSON to
 
 ```json
 {
+  "product_id": "nexa-ai-pro",
   "license_key": "NEXA-AI-<random-key>",
   "account_login": "12345678",
   "broker_server": "Exact-MT5-Server-Name",
@@ -77,16 +79,23 @@ WebRequest for listed URL** settings, then POST the following JSON to
 }
 ```
 
-New approvals receive a random `NEXA-AI-...` key (for example,
-`NEXA-AI-2F09A81B773C4D17A6BC9120FE3385D4`). Existing signed `NX1` keys remain
-valid for licenses that were approved before this format was introduced.
+Each approved account/product pair receives a separate random `NEXA-AI-...` key
+(for example, `NEXA-AI-2F09A81B773C4D17A6BC9120FE3385D4`). Set the product ID in
+the EA source before compiling; it must exactly match the product ID used when
+uploading that build in `/admin/licenses`. An EA's compiled product ID and its
+account-specific key must both match for validation to succeed.
+The current `EA.txt` source uses `nexa-ai-pro`; `EA.TXT2` uses `nexa-ml`. Re-upload
+an updated build with its existing product ID to replace that EA while preserving
+its product keys.
 
 Populate those fields from the entered key and the connected terminal
-(`ACCOUNT_LOGIN`, `ACCOUNT_SERVER`, and `ACCOUNT_TRADE_MODE`). Enable trading only
+(`ACCOUNT_LOGIN`, `ACCOUNT_SERVER`, and `ACCOUNT_TRADE_MODE`) and include the
+EA build's fixed `product_id`. Enable trading only
 when the API returns HTTP 200 with `{"success":true,"valid":true}`; fail closed on
-network errors, other responses, or account/server/type mismatches. Never embed an
-admin key or a shared ingestion credential in the EA. License keys are signed by
-the server and are not stored in plaintext in the database.
+network errors, other responses, or product/key/account/server/type mismatches.
+Never embed an admin key or a shared ingestion credential in the EA. License keys
+are randomly generated and stored server-side for comparison; never expose the
+database or its contents to clients.
 
 Optional timeout configuration:
 

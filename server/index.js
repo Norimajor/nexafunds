@@ -257,6 +257,26 @@ const initDatabases = async () => {
   )
   await run(
     db,
+    `CREATE TABLE IF NOT EXISTS ea_products (
+      product_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      storage_name TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`
+  )
+  await run(
+    db,
+    `CREATE TABLE IF NOT EXISTS ea_product_licenses (
+      license_id INTEGER NOT NULL REFERENCES ea_licenses(id) ON DELETE CASCADE,
+      product_id TEXT NOT NULL REFERENCES ea_products(product_id) ON DELETE CASCADE,
+      license_key TEXT NOT NULL UNIQUE,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (license_id, product_id)
+    )`
+  )
+  await run(
+    db,
     `CREATE UNIQUE INDEX IF NOT EXISTS ea_licenses_account_unique
      ON ea_licenses(account_login, broker_server COLLATE NOCASE)`
   )

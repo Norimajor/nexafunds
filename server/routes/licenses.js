@@ -1,77 +1,29 @@
 import { Router } from 'express'
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import multer from 'multer'
 
 const normalizeAccountType = (value) => String(value || '').trim().toLowerCase()
 
-const signLicense = (license, secret) => {
-  const payload = [
-    license.id,
-    license.user_id,
-    license.account_login,
-    license.broker_server.toLowerCase(),
-    license.account_type,
-    license.created_at,
-  ].join(':')
-  const signature = createHmac('sha256', secret).update(payload).digest('base64url')
-  return `NX1.${Number(license.id).toString(36)}.${signature}`
-}
-
 const createLicenseKey = () => `NEXA-AI-${randomBytes(16).toString('hex').toUpperCase()}`
+const isValidProductId = (productId) => /^[a-z0-9][a-z0-9-]{1,47}$/.test(productId)
 
-const getOrCreateLicenseKey = async (db, license, { run, get }) => {
-  if (license.status !== 'active') return null
-  if (license.license_key) return license.license_key
-
-  await run(
-    db,
-    `UPDATE ea_licenses SET license_key = ?
-     WHERE id = ? AND status = 'active' AND license_key IS NULL`,
-    [createLicenseKey(), license.id]
-  )
-  const refreshedLicense = await get(
-    db,
-    'SELECT license_key FROM ea_licenses WHERE id = ?',
-    [license.id]
-  )
-  return refreshedLicense?.license_key || null
-}
-
-const isValidSignature = (license, token, secret) => {
-  const parts = String(token || '').trim().split('.')
-  if (parts.length !== 3 || parts[0] !== 'NX1' || !/^[0-9a-z]+$/.test(parts[1])) {
-    return false
+const ensureProductLicenseKeys = async (db, licenseId, { all, run }) => {
+  const products = await all(db, 'SELECT product_id FROM ea_products')
+  for (const product of products) {
+    await run(
+      db,
+      `INSERT INTO ea_product_licenses (license_id, product_id, license_key)
+       VALUES (?, ?, ?) ON CONFLICT (license_id, product_id) DO NOTHING`,
+      [licenseId, product.product_id, createLicenseKey()]
+    )
   }
-
-  const id = Number.parseInt(parts[1], 36)
-  if (!Number.isSafeInteger(id) || id !== Number(license.id)) return false
-
-  const expected = signLicense(license, secret).split('.')[2]
-  const suppliedBuffer = Buffer.from(parts[2])
-  const expectedBuffer = Buffer.from(expected)
-  return (
-    suppliedBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(suppliedBuffer, expectedBuffer)
-  )
 }
 
-const hasDownload = (fs, path) => {
-  const file = process.env.EA_DOWNLOAD_PATH
-  return Boolean(
-    file &&
-      path.extname(file).toLowerCase() === '.ex5' &&
-      fs.existsSync(path.resolve(file))
-  )
-}
-
-const readEaOriginalName = async (fs, path, filePath) => {
-  try {
-    const originalName = (await fs.promises.readFile(`${filePath}.original-name`, 'utf8')).trim()
-    return originalName || path.basename(filePath)
-  } catch (error) {
-    if (error.code === 'ENOENT') return path.basename(filePath)
-    throw error
-  }
+const isAvailableProduct = (fs, path, root, product) => {
+  if (!root || path.extname(root).toLowerCase() !== '.ex5') return false
+  const resolvedRoot = path.dirname(path.resolve(root))
+  const resolvedFile = path.resolve(resolvedRoot, product.storage_name)
+  return path.dirname(resolvedFile) === resolvedRoot && fs.existsSync(resolvedFile)
 }
 
 export const createLicenseRouter = ({
@@ -86,16 +38,21 @@ export const createLicenseRouter = ({
   path,
 }) => {
   const router = Router()
+  const uploadRoot = () => {
+    const configuredPath = process.env.EA_DOWNLOAD_PATH
+    return configuredPath && path.extname(configuredPath).toLowerCase() === '.ex5'
+      ? path.dirname(path.resolve(configuredPath))
+      : null
+  }
   const eaUpload = multer({
     storage: multer.diskStorage({
       destination: (_req, _file, callback) => {
-        const configuredPath = process.env.EA_DOWNLOAD_PATH
-        if (!configuredPath || path.extname(configuredPath).toLowerCase() !== '.ex5') {
+        const directory = uploadRoot()
+        if (!directory) {
           callback(new Error('Set EA_DOWNLOAD_PATH to a writable .ex5 path on the API server.'))
           return
         }
 
-        const directory = path.dirname(path.resolve(configuredPath))
         try {
           fs.mkdirSync(directory, { recursive: true })
           callback(null, directory)
@@ -103,10 +60,7 @@ export const createLicenseRouter = ({
           callback(error)
         }
       },
-      filename: (_req, _file, callback) => {
-        const targetName = path.basename(process.env.EA_DOWNLOAD_PATH)
-        callback(null, `.${targetName}.${randomUUID()}.upload`)
-      },
+      filename: (_req, _file, callback) => callback(null, `.ea-${randomUUID()}.upload`),
     }),
     limits: { fileSize: 100 * 1024 * 1024, files: 1 },
     fileFilter: (_req, file, callback) => {
@@ -152,25 +106,54 @@ export const createLicenseRouter = ({
         db,
         `SELECT id, user_id, broker_name,
                 CASE WHEN broker_server LIKE 'pending-%' THEN '' ELSE broker_server END AS broker_server,
-                account_login, account_type, license_key,
+                account_login, account_type,
                 status, created_at, approved_at
          FROM ea_licenses WHERE user_id = ? ORDER BY id DESC`,
         [req.session.user.id]
       )
-      const licenseKeys = process.env.LICENSE_SIGNING_SECRET
-        ? await Promise.all(
-            licenses.map((license) => getOrCreateLicenseKey(db, license, { run, get }))
+      const activeLicenses = licenses.filter((license) => license.status === 'active')
+      if (process.env.LICENSE_SIGNING_SECRET) {
+        await Promise.all(
+          activeLicenses.map((license) =>
+            ensureProductLicenseKeys(db, license.id, { all, run })
           )
-        : licenses.map(() => null)
+        )
+      }
+      const products = await all(
+        db,
+        `SELECT p.product_id, p.name, p.file_name,
+                k.license_id, k.license_key
+         FROM ea_products p
+         LEFT JOIN ea_product_licenses k ON k.product_id = p.product_id
+           AND k.license_id IN (
+             SELECT id FROM ea_licenses WHERE user_id = ? AND status = 'active'
+           )
+         ORDER BY p.created_at, p.name, k.license_id`,
+        [req.session.user.id]
+      )
+      const availableProducts = await all(db, 'SELECT product_id, name, file_name, storage_name FROM ea_products ORDER BY created_at, name')
 
       res.json({
         success: true,
         license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
-        download_available: hasDownload(fs, path),
-        licenses: licenses.map((license, index) => ({
-          ...license,
-          license_key: licenseKeys[index],
+        download_available: availableProducts.some((product) =>
+          isAvailableProduct(fs, path, process.env.EA_DOWNLOAD_PATH, product)
+        ),
+        licenses,
+        products: availableProducts.map((product) => ({
+          product_id: product.product_id,
+          name: product.name,
+          file_name: product.file_name,
+          download_available: isAvailableProduct(
+            fs,
+            path,
+            process.env.EA_DOWNLOAD_PATH,
+            product
+          ),
         })),
+        product_licenses: process.env.LICENSE_SIGNING_SECRET
+          ? products.filter((product) => product.license_id !== null)
+          : [],
       })
     })
   )
@@ -263,41 +246,34 @@ export const createLicenseRouter = ({
       }
 
       const licenseKey = body.license_key.trim()
-      const isNewKey = /^NEXA-AI-[A-F0-9]{32}$/.test(licenseKey)
-      let license
-      let keyMatches = false
-      if (isNewKey) {
-        license = await get(
-          db,
-          'SELECT * FROM ea_licenses WHERE license_key = ?',
-          [licenseKey]
-        )
-        if (license?.license_key) {
-          const suppliedBuffer = Buffer.from(licenseKey)
-          const storedBuffer = Buffer.from(license.license_key)
-          keyMatches =
-            suppliedBuffer.length === storedBuffer.length &&
-            timingSafeEqual(suppliedBuffer, storedBuffer)
-        }
-      } else {
-        const parts = licenseKey.split('.')
-        const id = parts.length === 3 && /^[0-9a-z]+$/.test(parts[1])
-          ? Number.parseInt(parts[1], 36)
-          : NaN
-        if (!Number.isSafeInteger(id) || id < 1) {
-          return res.status(401).json({ success: false, valid: false })
-        }
-        license = await get(db, 'SELECT * FROM ea_licenses WHERE id = ?', [id])
-        keyMatches = license
-          ? isValidSignature(license, licenseKey, process.env.LICENSE_SIGNING_SECRET)
-          : false
+      const productId = String(body.product_id || '').trim().toLowerCase()
+      if (!isValidProductId(productId)) {
+        return res.status(401).json({ success: false, valid: false })
       }
+      const isNewKey = /^NEXA-AI-[A-F0-9]{32}$/.test(licenseKey)
+      const license = isNewKey
+        ? await get(
+          db,
+          `SELECT l.*, k.product_id, k.license_key FROM ea_product_licenses k
+           JOIN ea_licenses l ON l.id = k.license_id
+           WHERE k.product_id = ? AND k.license_key = ?`,
+          [productId, licenseKey]
+        )
+        : null
+      const storedKey = license?.license_key
+      const suppliedBuffer = Buffer.from(licenseKey)
+      const storedBuffer = Buffer.from(storedKey || '')
+      const keyMatches =
+        Boolean(license) &&
+        suppliedBuffer.length === storedBuffer.length &&
+        timingSafeEqual(suppliedBuffer, storedBuffer)
 
       const valid =
         license?.status === 'active' &&
         license.account_login === accountLogin &&
         license.broker_server.toLowerCase() === brokerServer.toLowerCase() &&
         license.account_type === accountType &&
+        license.product_id === productId &&
         keyMatches
 
       if (!valid) {
@@ -309,42 +285,53 @@ export const createLicenseRouter = ({
   )
 
   router.get(
-    '/ea/download/:licenseId',
+    '/ea/download/:licenseId/:productId',
     requireAuth,
     requireLicenseConfig,
     asyncRoute(async (req, res) => {
-      const license = await get(
+      const productId = String(req.params.productId || '').trim().toLowerCase()
+      if (!isValidProductId(productId)) {
+        return res.status(404).json({
+          success: false,
+          error: 'That EA download is unavailable.',
+        })
+      }
+      const entitlement = await get(
         db,
-        `SELECT id, status FROM ea_licenses WHERE id = ? AND user_id = ?`,
-        [req.params.licenseId, req.session.user.id]
+        `SELECT p.storage_name, p.file_name
+         FROM ea_product_licenses k
+         JOIN ea_licenses l ON l.id = k.license_id
+         JOIN ea_products p ON p.product_id = k.product_id
+         WHERE l.id = ? AND l.user_id = ? AND l.status = 'active'
+           AND k.product_id = ?`,
+        [req.params.licenseId, req.session.user.id, productId]
       )
 
-      if (!license || license.status !== 'active') {
+      if (!entitlement) {
         return res.status(403).json({
           success: false,
-          error: 'An active EA license is required to download the EA.',
+          error: 'An active account license for this EA is required to download it.',
         })
       }
 
-      const file = process.env.EA_DOWNLOAD_PATH
-      if (!file || path.extname(file).toLowerCase() !== '.ex5') {
+      const root = uploadRoot()
+      const resolvedRoot = root ? path.resolve(root) : null
+      const resolvedFile = resolvedRoot
+        ? path.resolve(resolvedRoot, entitlement.storage_name)
+        : null
+      if (
+        !resolvedRoot ||
+        path.dirname(resolvedFile) !== resolvedRoot ||
+        !fs.existsSync(resolvedFile)
+      ) {
         return res.status(503).json({
           success: false,
-          error: 'The compiled EA download is not available yet.',
+          error: 'The compiled EA file is not available yet.',
         })
       }
 
-      const resolvedFile = path.resolve(file)
-      if (!fs.existsSync(resolvedFile)) {
-        return res.status(503).json({
-          success: false,
-          error: 'The compiled EA download is not available yet.',
-        })
-      }
-
-      const originalName = await readEaOriginalName(fs, path, resolvedFile)
       res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition')
-      res.download(resolvedFile, originalName, (error) => {
+      res.download(resolvedFile, entitlement.file_name, (error) => {
         if (error) {
           console.error('EA download failed:', error)
           if (!res.headersSent) {
@@ -369,7 +356,23 @@ export const createLicenseRouter = ({
          FROM ea_licenses l JOIN users u ON u.id = l.user_id
          ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.id DESC`
       )
-      res.json({ success: true, licenses })
+      const products = await all(
+        db,
+        'SELECT product_id, name, file_name, created_at FROM ea_products ORDER BY created_at, name'
+      )
+      const keys = await all(
+        db,
+        `SELECT license_id, product_id, license_key
+         FROM ea_product_licenses ORDER BY product_id`
+      )
+      res.json({
+        success: true,
+        licenses: licenses.map((license) => ({
+          ...license,
+          product_licenses: keys.filter((key) => String(key.license_id) === String(license.id)),
+        })),
+        products,
+      })
     })
   )
 
@@ -377,39 +380,41 @@ export const createLicenseRouter = ({
     '/admin/ea',
     requireAdmin,
     asyncRoute(async (_req, res) => {
-      const configuredFile = process.env.EA_DOWNLOAD_PATH
-      const resolvedFile = configuredFile ? path.resolve(configuredFile) : null
+      const products = await all(
+        db,
+        'SELECT product_id, name, file_name, storage_name, created_at FROM ea_products ORDER BY created_at, name'
+      )
       res.json({
         success: true,
         license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
-        download_available: hasDownload(fs, path),
-        file_name:
-          resolvedFile && fs.existsSync(resolvedFile)
-            ? await readEaOriginalName(fs, path, resolvedFile)
-            : configuredFile
-              ? path.basename(configuredFile)
-              : null,
+        products: products.map((product) => ({
+          product_id: product.product_id,
+          name: product.name,
+          file_name: product.file_name,
+          created_at: product.created_at,
+          download_available: isAvailableProduct(
+            fs,
+            path,
+            process.env.EA_DOWNLOAD_PATH,
+            product
+          ),
+        })),
       })
     })
   )
 
   router.post(
-    '/admin/ea/upload',
+    '/admin/products/upload',
     requireAdmin,
     receiveEaUpload,
     asyncRoute(async (req, res) => {
       if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          error: 'Choose a compiled MetaTrader .ex5 EA file to upload.',
-        })
+        return res.status(400).json({ success: false, error: 'Choose a compiled MetaTrader .ex5 EA file to upload.' })
       }
 
-      const targetPath = path.resolve(process.env.EA_DOWNLOAD_PATH)
-      const backupPath = `${targetPath}.${randomUUID()}.backup`
-      const metadataPath = `${targetPath}.original-name`
-      const metadataBackupPath = `${metadataPath}.${randomUUID()}.backup`
-      const metadataUploadPath = `${metadataPath}.${randomUUID()}.upload`
+      const productId = String(req.body?.product_id || '').trim().toLowerCase()
+      const name = String(req.body?.name || '').trim()
+      const root = uploadRoot()
       const originalName = path
         .basename(String(req.file.originalname || '').replace(/[\\/]/g, '/'))
         .split('')
@@ -419,20 +424,20 @@ export const createLicenseRouter = ({
         })
         .join('')
         .trim()
-      if (!originalName) {
-        await fs.promises.unlink(req.file.path).catch((cleanupError) => {
-          if (cleanupError.code !== 'ENOENT') {
-            console.error('Unable to remove invalid EA upload:', cleanupError)
-          }
+      if (!isValidProductId(productId) || !name || name.length > 80 || !originalName || !root) {
+        await fs.promises.unlink(req.file.path).catch((error) => {
+          if (error.code !== 'ENOENT') console.error('Unable to remove invalid EA product upload:', error)
         })
         return res.status(400).json({
           success: false,
-          error: 'The uploaded EA must have a valid filename.',
+          error: 'Provide a valid product ID, EA name, .ex5 file, and EA_DOWNLOAD_PATH storage root.',
         })
       }
 
+      const storageName = `${productId}.ex5`
+      const targetPath = path.resolve(root, storageName)
+      const backupPath = `${targetPath}.${randomUUID()}.backup`
       let backupCreated = false
-      let metadataBackupCreated = false
       let uploadInstalled = false
       try {
         try {
@@ -441,62 +446,64 @@ export const createLicenseRouter = ({
         } catch (error) {
           if (error.code !== 'ENOENT') throw error
         }
-        try {
-          await fs.promises.rename(metadataPath, metadataBackupPath)
-          metadataBackupCreated = true
-        } catch (error) {
-          if (error.code !== 'ENOENT') throw error
-        }
         await fs.promises.rename(req.file.path, targetPath)
         uploadInstalled = true
-        await fs.promises.writeFile(metadataUploadPath, originalName, { flag: 'wx' })
-        await fs.promises.rename(metadataUploadPath, metadataPath)
+        await run(
+          db,
+          `INSERT INTO ea_products (product_id, name, file_name, storage_name)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT (product_id) DO UPDATE SET
+             name = excluded.name,
+             file_name = excluded.file_name,
+             storage_name = excluded.storage_name`,
+          [productId, name, originalName, storageName]
+        )
+        if (process.env.LICENSE_SIGNING_SECRET) {
+          const activeLicenses = await all(db, "SELECT id FROM ea_licenses WHERE status = 'active'")
+          await Promise.all(
+            activeLicenses.map((license) => ensureProductLicenseKeys(db, license.id, { all, run }))
+          )
+        }
       } catch (error) {
-        await fs.promises.unlink(metadataUploadPath).catch((cleanupError) => {
-          if (cleanupError.code !== 'ENOENT') {
-            console.error('Unable to remove temporary EA filename metadata:', cleanupError)
-          }
-        })
         if (uploadInstalled) {
           await fs.promises.unlink(targetPath).catch((cleanupError) => {
-            if (cleanupError.code !== 'ENOENT') {
-              console.error('Unable to remove incomplete EA upload:', cleanupError)
-            }
+            if (cleanupError.code !== 'ENOENT') console.error('Unable to remove incomplete EA product upload:', cleanupError)
           })
         }
         if (backupCreated) {
           await fs.promises.rename(backupPath, targetPath).catch((restoreError) => {
-            console.error('Unable to restore previous EA upload:', restoreError)
-          })
-        }
-        if (metadataBackupCreated) {
-          await fs.promises.rename(metadataBackupPath, metadataPath).catch((restoreError) => {
-            console.error('Unable to restore previous EA filename metadata:', restoreError)
+            console.error('Unable to restore previous EA product upload:', restoreError)
           })
         }
         await fs.promises.unlink(req.file.path).catch((cleanupError) => {
-          if (cleanupError.code !== 'ENOENT') {
-            console.error('Unable to remove temporary EA upload:', cleanupError)
-          }
+          if (cleanupError.code !== 'ENOENT') console.error('Unable to remove temporary EA product upload:', cleanupError)
         })
         throw error
       }
       if (backupCreated) {
-        await fs.promises.unlink(backupPath).catch((cleanupError) => {
-          console.error('Unable to remove previous EA upload backup:', cleanupError)
-        })
-      }
-      if (metadataBackupCreated) {
-        await fs.promises.unlink(metadataBackupPath).catch((cleanupError) => {
-          console.error('Unable to remove previous EA filename metadata backup:', cleanupError)
+        await fs.promises.unlink(backupPath).catch((error) => {
+          console.error('Unable to remove previous EA product backup:', error)
         })
       }
 
       res.json({
         success: true,
-        download_available: true,
-        file_name: originalName,
+        product: {
+          product_id: productId,
+          name,
+          file_name: originalName,
+          download_available: true,
+        },
       })
+    })
+  )
+
+  router.post(
+    '/admin/ea/upload',
+    requireAdmin,
+    (_req, res) => res.status(410).json({
+      success: false,
+      error: 'Use /api/admin/products/upload with an EA product ID and display name.',
     })
   )
 
@@ -521,16 +528,14 @@ export const createLicenseRouter = ({
       }
 
       const status = decision === 'approve' ? 'active' : 'rejected'
-      const licenseKey = status === 'active' ? createLicenseKey() : null
       const result = await run(
         db,
         `UPDATE ea_licenses
          SET status = ?,
              broker_server = CASE WHEN ? = 'active' THEN ? ELSE broker_server END,
-             license_key = CASE WHEN ? = 'active' THEN ? ELSE license_key END,
              approved_at = CASE WHEN ? = 'active' THEN CURRENT_TIMESTAMP ELSE NULL END
          WHERE id = ? AND status = 'pending'`,
-        [status, status, brokerServer, status, licenseKey, status, req.params.licenseId]
+        [status, status, brokerServer, status, req.params.licenseId]
       )
 
       if (!result.changes) {
@@ -547,6 +552,9 @@ export const createLicenseRouter = ({
         })
       }
 
+      if (status === 'active') {
+        await ensureProductLicenseKeys(db, req.params.licenseId, { all, run })
+      }
       res.json({ success: true, status })
     })
   )

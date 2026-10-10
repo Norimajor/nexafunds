@@ -12,8 +12,9 @@ export default function AdminLicenses() {
   const [rememberAdminKey, setRememberAdminKey] = useState(true)
   const [hasSavedAdminKey, setHasSavedAdminKey] = useState(() => Boolean(readSavedAdminKey()))
   const [licenses, setLicenses] = useState([])
-  const [eaFileName, setEaFileName] = useState('')
-  const [eaAvailable, setEaAvailable] = useState(false)
+  const [products, setProducts] = useState([])
+  const [productId, setProductId] = useState('')
+  const [productName, setProductName] = useState('')
   const [signingConfigured, setSigningConfigured] = useState(false)
   const [uploadFile, setUploadFile] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -42,9 +43,8 @@ export default function AdminLicenses() {
         throw new Error(eaData.error || 'Unable to check the EA upload status.')
       }
       setLicenses(licenseData.licenses || [])
-      setEaAvailable(Boolean(eaData.download_available))
+      setProducts(eaData.products || [])
       setSigningConfigured(Boolean(eaData.license_configured))
-      setEaFileName(eaData.file_name || '')
       setAuthenticated(true)
       try {
         if (rememberAdminKey) {
@@ -90,7 +90,9 @@ export default function AdminLicenses() {
     try {
       const formData = new FormData()
       formData.append('ea_file', uploadFile)
-      const response = await fetch(`${API_BASE}/api/admin/ea/upload`, {
+      formData.append('product_id', productId.trim().toLowerCase())
+      formData.append('name', productName.trim())
+      const response = await fetch(`${API_BASE}/api/admin/products/upload`, {
         method: 'POST',
         headers: { 'x-admin-key': adminKey },
         body: formData,
@@ -100,8 +102,12 @@ export default function AdminLicenses() {
         throw new Error(data.error || 'Unable to upload the EA.')
       }
 
-      setEaAvailable(true)
-      setEaFileName(data.file_name || uploadFile.name)
+      setProducts((current) => [
+        ...current.filter((product) => product.product_id !== data.product.product_id),
+        data.product,
+      ])
+      setProductId('')
+      setProductName('')
       setUploadFile(null)
       form.reset()
     } catch (uploadError) {
@@ -148,7 +154,7 @@ export default function AdminLicenses() {
         <div className="nf-workspace-heading">
           <span className="nf-eyebrow">IB VERIFICATION</span>
           <h1>Review MT5 accounts.</h1>
-          <p>Upload the compiled EA and verify MT5 account requests. Approved account owners receive a signed key and access to the download page.</p>
+          <p>Upload each EA as a separate product and verify MT5 account requests. Approved accounts receive a different product key for every EA.</p>
         </div>
         {error && <p className="nf-form-error nf-page-message" role="alert">{error}</p>}
         {!authenticated ? (
@@ -188,11 +194,26 @@ export default function AdminLicenses() {
             <div className="nf-panel-heading">
               <span className="nf-step-number">01</span>
               <div>
-                <h2>Master EA file</h2>
-                <p>{eaAvailable ? `Available to approved accounts: ${eaFileName}` : 'No EA file uploaded yet.'}</p>
+                <h2>EA products</h2>
+                <p>Upload each compiled EA separately. Accounts automatically receive a distinct key for each EA.</p>
               </div>
             </div>
             <form className="nf-license-form" onSubmit={handleUpload}>
+              <label className="nf-form-field">
+                <span>Product ID (must match the EA build)</span>
+                <input
+                  value={productId}
+                  onChange={(event) => setProductId(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  placeholder="e.g. nexa-ai-pro"
+                  pattern="[a-z0-9][a-z0-9-]{1,47}"
+                  maxLength={48}
+                  required
+                />
+              </label>
+              <label className="nf-form-field">
+                <span>EA display name</span>
+                <input value={productName} onChange={(event) => setProductName(event.target.value)} placeholder="e.g. Nexa AI Pro" maxLength={80} required />
+              </label>
               <label className="nf-form-field">
                 <span>Compiled MetaTrader EA (.ex5, up to 100 MB)</span>
                 <input
@@ -203,9 +224,23 @@ export default function AdminLicenses() {
                 />
               </label>
               <button className="nf-primary nf-submit-button" type="submit" disabled={uploading}>
-                {uploading ? 'Uploading EA…' : eaAvailable ? 'Replace EA file' : 'Upload EA file'}
+                {uploading ? 'Uploading EA…' : 'Upload or replace EA'}
               </button>
             </form>
+            {products.length > 0 && (
+              <div className="nf-license-list mt-5">
+                {products.map((product) => (
+                  <article className="nf-license-card" key={product.product_id}>
+                    <div className="nf-license-card-heading">
+                      <div><strong>{product.name}</strong><span>{product.product_id} · {product.file_name}</span></div>
+                      <span className={`nf-status ${product.download_available ? 'nf-status-active' : 'nf-status-pending'}`}>
+                        {product.download_available ? 'Available' : 'File missing'}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
             {!signingConfigured && (
               <p className="nf-form-error nf-page-message mt-5" role="alert">
                 License issuance is disabled until LICENSE_SIGNING_SECRET is configured in the API hosting environment and the server is restarted.
@@ -245,6 +280,19 @@ export default function AdminLicenses() {
                       <p className="nf-license-server">MT5 server: {license.broker_server}</p>
                     )}
                     <p className="nf-review-note">Submitted {license.created_at}</p>
+                    {license.status === 'active' && (
+                      <div className="nf-license-list mt-4">
+                        {(license.product_licenses || []).map((productLicense) => {
+                          const product = products.find((entry) => entry.product_id === productLicense.product_id)
+                          return (
+                            <div className="nf-issued-key" key={productLicense.product_id}>
+                              <span>{product?.name || productLicense.product_id} key</span>
+                              <code>{productLicense.license_key}</code>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                     {license.status === 'pending' && (
                       <div className="nf-admin-actions">
                         <button className="nf-primary" type="button" disabled={busyId === license.id || !signingConfigured || !license.broker_server?.trim()} onClick={() => handleDecision(license.id, 'approve')}>{busyId === license.id ? 'Updating…' : 'Verify & approve'}</button>

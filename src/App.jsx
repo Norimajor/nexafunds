@@ -1,11 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import VerifyEmail from './pages/VerifyEmail'
 import EaAccess from './pages/EaAccess'
-import EaDownload from './pages/EaDownload'
 import AdminLicenses from './pages/AdminLicenses'
 import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
@@ -21,7 +20,7 @@ export default function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/ea-access" element={<EaAccess />} />
-        <Route path="/ea-download/:licenseId" element={<EaDownload />} />
+        <Route path="/ea-download/:licenseId" element={<Navigate to="/dashboard?section=ea-access" replace />} />
         <Route path="/admin/licenses" element={<AdminLicenses />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/portfolio" element={<Portfolio />} />
