@@ -9,7 +9,7 @@ const formatDate = (value) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
-export default function EaAccess() {
+export default function EaAccess({ embedded = false }) {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [licenses, setLicenses] = useState([])
@@ -59,7 +59,8 @@ export default function EaAccess() {
         }
         if (cancelled) return
         setUser(data.user)
-        await loadLicenses()
+        const loaded = await loadLicenses()
+        if (!loaded || cancelled) return
       } catch (loadError) {
         if (!cancelled) setError(loadError.message || 'Unable to load EA access.')
       } finally {
@@ -164,19 +165,21 @@ export default function EaAccess() {
   }
 
   return (
-    <div className="nf-workspace-page">
-      <header className="nf-workspace-header">
-        <button className="nf-brand nf-brand-button" onClick={() => navigate('/')} aria-label="NexaFunds home">
-          <span className="nf-logo">N</span>
-          <span><strong>NexaFunds</strong><small>EA access portal</small></span>
-        </button>
-        <div className="nf-workspace-user">
-          {user && <span>{user.first_name} {user.last_name}</span>}
-          <button className="nf-quiet-button" onClick={handleLogout}>Sign out</button>
-        </div>
-      </header>
+    <div className={embedded ? 'nf-workspace-section' : 'nf-workspace-page'}>
+      {!embedded && (
+        <header className="nf-workspace-header">
+          <button className="nf-brand nf-brand-button" onClick={() => navigate('/')} aria-label="NexaFunds home">
+            <span className="nf-logo">N</span>
+            <span><strong>NexaFunds</strong><small>EA access portal</small></span>
+          </button>
+          <div className="nf-workspace-user">
+            {user && <span>{user.first_name} {user.last_name}</span>}
+            <button className="nf-quiet-button" onClick={handleLogout}>Sign out</button>
+          </div>
+        </header>
+      )}
 
-      <main className="nf-workspace-main">
+      <div className={embedded ? 'nf-workspace-main nf-workspace-embedded' : 'nf-workspace-main'}>
         <div className="nf-workspace-heading">
           <span className="nf-eyebrow">YOUR MT5 ACCESS</span>
           <h1>Connect your trading account.</h1>
@@ -264,8 +267,8 @@ export default function EaAccess() {
             <div className="nf-verification-note"><span>i</span><p>EA keys are checked against the account number, broker server and demo/live mode reported by MT5.</p></div>
           </section>
         </div>
-      </main>
-      <footer className="nf-footer nf-workspace-footer">NexaFunds · Secure, account-bound EA access</footer>
+      </div>
+      {!embedded && <footer className="nf-footer nf-workspace-footer">NexaFunds · Secure, account-bound EA access</footer>}
     </div>
   )
 }
