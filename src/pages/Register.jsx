@@ -109,7 +109,7 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
         throw new Error(data.error || 'Failed to create account')
       }
 
-      navigate('/dashboard', { replace: true })
+      navigate('/ea-access', { replace: true })
     } catch (error) {
       console.error('Registration error:', error)
       alert(error.message || 'Failed to create account. Please try again.')
@@ -122,8 +122,8 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
     <div className="nf-auth-page nf-register-page">
       <main className="nf-auth-form-side"><div className="nf-auth-form">
         <div className="nf-brand"><span className="nf-logo">N</span><span><strong>NexaFunds</strong><small>Investor Portal</small></span></div>
-        <h1>Create Your NexaFunds Account</h1>
-        <p className="nf-auth-subtitle">Start your journey with a secure investor portal.</p>
+        <h1>Create your account</h1>
+        <p className="nf-auth-subtitle">Set up your secure NexaFunds investor and EA access.</p>
         <div className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -290,7 +290,7 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
             type="button"
             onClick={handleCreateAccount}
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 rounded-xl font-semibold transition"
+            className="nf-primary w-full py-3 rounded-xl font-semibold transition"
           >
             {loading ? 'Creating Account...' : 'Create Account'}
           </button>

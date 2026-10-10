@@ -8,6 +8,8 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import strategyRouter from './routes/strategy.js'
+import mlRouter from './routes/ml.js'
+import { createLicenseRouter } from './routes/licenses.js'
 
 dotenv.config()
 
@@ -199,6 +201,26 @@ const initDatabases = async () => {
       password TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`
+  )
+
+  await run(
+    db,
+    `CREATE TABLE IF NOT EXISTS ea_licenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      broker_name TEXT NOT NULL,
+      broker_server TEXT NOT NULL,
+      account_login TEXT NOT NULL,
+      account_type TEXT NOT NULL CHECK (account_type IN ('demo', 'real')),
+      status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'rejected')),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      approved_at DATETIME
+    )`
+  )
+  await run(
+    db,
+    `CREATE UNIQUE INDEX IF NOT EXISTS ea_licenses_account_unique
+     ON ea_licenses(account_login, broker_server COLLATE NOCASE)`
   )
 
   await run(
@@ -823,6 +845,21 @@ const requireAdmin = (req, res, next) => {
   next()
 }
 
+app.use(
+  '/api',
+  createLicenseRouter({
+    db,
+    requireAuth,
+    requireAdmin,
+    run,
+    get,
+    all,
+    asyncRoute,
+    fs,
+    path,
+  })
+)
+
 app.get(
   '/api/users',
   requireAdmin,
@@ -1246,6 +1283,7 @@ app.post(
 // FALLBACKS
 // ============================================================
 app.use('/api/strategy', strategyRouter)
+app.use('/api/ml', mlRouter)
 app.use(express.static(DIST_DIR))
 app.get('/{*splat}', (req, res, next) => {
   if (req.path.startsWith('/api/')) {

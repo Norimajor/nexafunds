@@ -8,9 +8,12 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleLogin = async () => {
+  const handleLogin = async (event) => {
+    event.preventDefault()
     setLoading(true)
+    setError('')
 
     try {
       const response = await fetch('https://nexafunds-app.onrender.com/api/login', {
@@ -29,21 +32,19 @@ export default function Login() {
       try {
         data = await response.json()
       } catch {
-        alert('The server returned an invalid response. Please try again.')
-        return
+        throw new Error('The server returned an invalid response. Please try again.')
       }
 
       if (response.ok && data.success) {
         localStorage.setItem('nexafunds_user', JSON.stringify(data.user))
-        alert(`Welcome back ${data.user.first_name}!`)
-        navigate('/dashboard')
+        navigate('/ea-access')
       } else if (data.error) {
-        alert(data.error)
+        throw new Error(data.error)
       } else {
-        alert('The server could not complete your login request. Please try again.')
+        throw new Error('The server could not complete your login request. Please try again.')
       }
-    } catch {
-      alert('Unable to connect to server')
+    } catch (loginError) {
+      setError(loginError.message || 'Unable to connect to server.')
     } finally {
       setLoading(false)
     }
@@ -57,53 +58,58 @@ export default function Login() {
       <main className="nf-auth-form-side"><div className="nf-auth-form">
         <div className="nf-brand"><span className="nf-logo">N</span><span><strong>NexaFunds</strong><small>Investor Portal</small></span></div>
         <h1>Welcome back</h1>
-        <p className="nf-auth-subtitle">Sign in to your investor account</p>
-        <div className="space-y-5">
+        <p className="nf-auth-subtitle">Sign in to manage your MT5 EA access.</p>
+        <form className="space-y-5" onSubmit={handleLogin}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
-            </label>
+            <label className="block text-sm font-medium mb-2" htmlFor="login-email">Email address</label>
 
             <input
+              id="login-email"
               type="email"
+              autoComplete="email"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="nf-field w-full px-4 py-3 border rounded-xl focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
+            <label className="block text-sm font-medium mb-2" htmlFor="login-password">Password</label>
 
             <input
+              id="login-password"
               type="password"
+              autoComplete="current-password"
+              required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="nf-field w-full px-4 py-3 border rounded-xl focus:outline-none"
             />
           </div>
 
+          {error && <p className="nf-form-error" role="alert">{error}</p>}
+
           <button
-            onClick={handleLogin}
+            type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold transition disabled:opacity-50"
+            className="nf-primary w-full py-3 rounded-xl font-semibold transition disabled:opacity-50"
           >
-            {loading ? 'Signing In...' : 'Sign In'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
 
           <button
+            type="button"
             onClick={() => navigate('/register')}
-            className="w-full border border-gray-300 hover:bg-gray-50 text-gray-700 py-3 rounded-xl font-semibold transition"
+            className="nf-secondary w-full py-3 rounded-xl font-semibold transition"
           >
-            Create New Account
+            Create an account
           </button>
-        </div>
+        </form>
+        <p className="nf-auth-switch">Need EA access? <button type="button" onClick={() => navigate('/register')}>Get started</button></p>
       </div></main>
     </div>
   )
 }
-

@@ -11,6 +11,50 @@ The dashboard also proxies the live CPI, PPI, and FOMC forecasts from the same
 service at `GET /api/economic/latest`. Missing upstream prediction files are
 returned as unavailable data; the dashboard does not fall back to hardcoded values.
 
+## MT5 EA account verification and licensing
+
+After creating an account, clients register their broker, exact MT5 server, account
+number, and demo/live account type at `/ea-access`. Demo accounts are issued a key
+immediately. Live-account requests remain pending until an administrator verifies
+that the account is under the NexaFunds IB in `/admin/licenses`. The account number
+and server are unique across submissions; each active license is bound to that
+account and its demo/live mode.
+
+Configure these backend-only environment variables before accepting license
+requests:
+
+```env
+ADMIN_API_KEY=<private admin key>
+LICENSE_SIGNING_SECRET=<long random signing secret>
+EA_DOWNLOAD_PATH=<absolute path to the compiled .ex5 file>
+```
+
+Do not expose these values through `VITE_*` variables or commit real secrets. The
+EA download route serves only the configured compiled `.ex5` file, and only to an
+authenticated owner of an active license. The source snapshots in
+`C:\Users\USER\NEXA-FUNDS-AI` are not downloadable EA binaries.
+
+The MQL5 EA must validate its input key before enabling trading. Add the NexaFunds
+backend origin to MetaTrader's **Tools → Options → Expert Advisors → Allow
+WebRequest for listed URL** settings, then POST the following JSON to
+`/api/licenses/validate` over HTTPS:
+
+```json
+{
+  "license_key": "NX1.<license-id>.<signature>",
+  "account_login": "12345678",
+  "broker_server": "Exact-MT5-Server-Name",
+  "account_type": "demo"
+}
+```
+
+Populate those fields from the entered key and the connected terminal
+(`ACCOUNT_LOGIN`, `ACCOUNT_SERVER`, and `ACCOUNT_TRADE_MODE`). Enable trading only
+when the API returns HTTP 200 with `{"success":true,"valid":true}`; fail closed on
+network errors, other responses, or account/server/type mismatches. Never embed an
+admin key or a shared ingestion credential in the EA. License keys are signed by
+the server and are not stored in plaintext in the database.
+
 Optional timeout configuration:
 
 ```env
