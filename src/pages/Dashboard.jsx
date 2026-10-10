@@ -627,11 +627,11 @@ const goTo = (labelName) => {
           ) : (
             <>
               <header
-            className={
+            className={`nf-dashboard-toolbar sticky top-0 z-30 overflow-hidden rounded-b-2xl px-4 py-4 backdrop-blur-2xl sm:px-6 sm:py-5 ${
               isDark
-                ? 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-white/[0.08] bg-[#091316]/80 px-4 py-4 shadow-[0_15px_45px_-35px_rgba(91,209,167,0.24)] backdrop-blur-2xl sm:px-6 sm:py-5'
-                : 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-slate-900/5 bg-white/70 px-4 py-4 backdrop-blur-2xl sm:px-6 sm:py-5'
-            }
+                ? 'nf-dashboard-toolbar-dark border-b border-white/[0.08] bg-[#091316]/80 shadow-[0_15px_45px_-35px_rgba(91,209,167,0.24)]'
+                : 'nf-dashboard-toolbar-light border-b border-slate-900/5 bg-white/70'
+            }`}
           >
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#5bd1a7]/0 via-[#eac16e]/60 to-[#5bd1a7]/0" />
             <button
@@ -639,10 +639,10 @@ const goTo = (labelName) => {
               onClick={() => setMarketVisualVisible((visible) => !visible)}
               aria-label={marketVisualVisible ? 'Hide market background' : 'Show market background'}
               title={marketVisualVisible ? 'Hide market background' : 'Show market background'}
-              className={`absolute right-2 top-1/2 z-10 inline-flex h-9 w-7 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 text-slate-300 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 sm:right-3 sm:h-10 sm:w-8 ${
+              className={`absolute right-2 top-1/2 z-10 inline-flex h-9 w-7 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5bd1a7]/70 sm:right-3 sm:h-10 sm:w-8 ${
                 isDark
-                  ? 'border-white/10 bg-slate-950/70 hover:bg-cyan-400/10 hover:text-cyan-200'
-                  : 'border-slate-200 bg-white/80 text-slate-600 hover:bg-sky-50 hover:text-sky-600'
+                  ? 'border-white/10 bg-slate-950/70 text-[#c5d4cb] hover:bg-[#5bd1a7]/10 hover:text-[#75dfb5]'
+                  : 'border-[#193a30]/15 bg-white/80 text-[#52635a] hover:bg-[#5bd1a7]/10 hover:text-[#267653]'
               }`}
             >
               {marketVisualVisible ? <EyeOff size={15} strokeWidth={1.8} /> : <Eye size={15} strokeWidth={1.8} />}
@@ -656,22 +656,22 @@ const goTo = (labelName) => {
                     'inline-flex h-10 w-10 items-center justify-center rounded-xl border text-lg lg:hidden',
                     pressable,
                     isDark
-                      ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-sky-400/50 hover:text-sky-300'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:text-sky-600',
+                      ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-[#5bd1a7]/50 hover:text-[#75dfb5]'
+                      : 'border-[#193a30]/15 bg-white text-[#33483d] hover:border-[#5bd1a7]/60 hover:text-[#267653]',
                   ].join(' ')}
                 >
                   <Menu size={19} strokeWidth={1.8} />
                 </button>
 
-                <div className="relative">
+                <div className="relative nf-dashboard-title">
                   <div className="pointer-events-none absolute -inset-x-3 -inset-y-2 -z-10 bg-[#5bd1a7]/10 blur-2xl" />
-                  <p className={`text-xs font-medium tracking-wide sm:text-sm ${softText}`}>Welcome back</p>
-                  <h2 className="text-2xl font-bold tracking-tight text-white sm:text-[28px]">Dashboard overview</h2>
+                  <p className="nf-dashboard-title-kicker">NEXAFUNDS INVESTOR PORTAL</p>
+                  <h2 className="text-2xl font-bold tracking-tight sm:text-[28px]">Dashboard overview</h2>
                 </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
-                <span className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-300 shadow-[0_8px_24px_-16px_rgba(52,211,153,0.9)]">
+                <span className="nf-live-sync inline-flex h-9 items-center gap-2 rounded-full px-3 text-[11px] font-semibold uppercase tracking-[0.12em]">
                   <span className="relative flex h-2 w-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-60" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.9)]" />
@@ -686,8 +686,8 @@ const goTo = (labelName) => {
                     'inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium',
                     pressable,
                     isDark
-                      ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-sky-400/50 hover:text-sky-300 active:bg-sky-500/20'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:text-sky-600 active:bg-sky-100',
+                      ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-[#5bd1a7]/50 hover:text-[#75dfb5] active:bg-[#5bd1a7]/10'
+                        : 'border-[#193a30]/15 bg-white text-[#33483d] hover:border-[#5bd1a7]/60 hover:text-[#267653] active:bg-[#5bd1a7]/10',
                   ].join(' ')}
                 >
                   <Settings2 size={16} strokeWidth={1.8} /> <span>Settings</span>
@@ -700,8 +700,8 @@ const goTo = (labelName) => {
                     'inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium',
                     pressable,
                     isDark
-                      ? 'border-white/10 bg-white/[0.05] text-slate-100 hover:border-amber-300/50 hover:text-amber-200 active:bg-amber-400/20'
-                      : 'border-slate-200 bg-white text-slate-800 hover:border-indigo-300 hover:text-indigo-600 active:bg-indigo-100',
+                      ? 'border-[#eac16e]/25 bg-[#eac16e]/[0.06] text-[#f2d893] hover:border-[#eac16e]/60 hover:text-[#ffe7a3] active:bg-[#eac16e]/15'
+                      : 'border-[#eac16e]/50 bg-[#fffaf0] text-[#72551b] hover:border-[#d5a842] hover:text-[#654913] active:bg-[#fff1ca]',
                   ].join(' ')}
                 >
                   {isDark ? <Sun size={16} strokeWidth={1.8} /> : <Moon size={16} strokeWidth={1.8} />}
@@ -712,9 +712,9 @@ const goTo = (labelName) => {
                   type="button"
                   onClick={() => navigate('/login')}
                   className={[
-                    'inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-r from-rose-500/90 to-fuchsia-500/90 px-4 text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(244,63,94,0.9)]',
+                    'inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-r from-[#d6ad55] to-[#5bd1a7] px-4 text-sm font-semibold text-[#10231b] shadow-[0_14px_30px_-12px_rgba(91,209,167,0.42)]',
                     pressable,
-                    'hover:from-rose-600 hover:to-pink-600 active:from-rose-700 active:to-pink-700',
+                    'hover:brightness-110 active:brightness-95',
                   ].join(' ')}
                 >
                   <LogOut size={16} strokeWidth={1.8} />
@@ -726,26 +726,32 @@ const goTo = (labelName) => {
 
           <div className="space-y-6 px-4 py-6 sm:px-6">
             {/* Welcome banner */}
-            <div
+            <section
+              aria-labelledby="dashboard-welcome-title"
               className={
                 isDark
-                  ? 'relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-r from-[#101c19]/90 via-[#14211d]/75 to-[#3d3422]/50 p-6 backdrop-blur-xl'
-                  : 'relative overflow-hidden rounded-[28px] border border-slate-900/5 bg-gradient-to-r from-white via-sky-50 to-emerald-50 p-6'
+                  ? 'nf-dashboard-welcome nf-dashboard-welcome-dark relative overflow-hidden rounded-[28px] border p-6 backdrop-blur-xl sm:p-8'
+                  : 'nf-dashboard-welcome nf-dashboard-welcome-light relative overflow-hidden rounded-[28px] border p-6 sm:p-8'
               }
             >
-              <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#eac16e]/15 blur-3xl" />
-              <h2 className="relative text-2xl font-bold tracking-tight">
-                {user.first_name}, welcome to NexaFunds 👋
-              </h2>
-              <p className={`relative mt-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                {user.first_name}, welcome to <span className="font-semibold text-sky-500">NexaFunds</span>, where you get
-                to join{' '}
-                <span className="font-semibold text-emerald-500">
-                  {totalUsers} registered {totalUsers === 1 ? 'member' : 'members'}
-                </span>{' '}
-                and follow live portfolio performance as our trading community grows.
-              </p>
-            </div>
+              <div className="nf-welcome-orb nf-welcome-orb-gold" />
+              <div className="nf-welcome-orb nf-welcome-orb-mint" />
+              <div className="nf-welcome-grid" />
+              <div className="nf-dashboard-welcome-content">
+                <div>
+                  <span className="nf-welcome-eyebrow">YOUR INVESTOR DASHBOARD</span>
+                  <h2 id="dashboard-welcome-title">Welcome to NexaFunds, {user.first_name}.</h2>
+                  <p>
+                    Your portfolio, MT5 activity, and market insights—all in one place. Track your account live and follow your progress as our investor community grows.
+                  </p>
+                </div>
+                <div className="nf-member-stat" aria-label={`${totalUsers} registered members`}>
+                  <span className="nf-member-stat-label">OUR COMMUNITY</span>
+                  <strong>{totalUsers}</strong>
+                  <span>{totalUsers === 1 ? 'registered member' : 'registered members'}</span>
+                </div>
+              </div>
+            </section>
 
             {/* MT5 overview */}
             <section className="grid gap-5 xl:grid-cols-[1.6fr_0.8fr]">
