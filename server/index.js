@@ -10,11 +10,15 @@ import { fileURLToPath } from 'url'
 import strategyRouter from './routes/strategy.js'
 import mlRouter from './routes/ml.js'
 import { createLicenseRouter } from './routes/licenses.js'
+import { createPostgresUserStore } from './user-store.js'
 
 dotenv.config()
 
 const app = express()
 const isProd = process.env.NODE_ENV === 'production'
+if (isProd && !process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL must be set in production to persist user accounts and EA licenses')
+}
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const DIST_DIR = path.resolve(__dirname, '../dist')
@@ -25,6 +29,10 @@ const DIST_DIR = path.resolve(__dirname, '../dist')
 
 const db = new sqlite3.Database('./database.db')
 const mt5db = new sqlite3.Database('./nexafunds_mt5.db')
+const userStore = process.env.DATABASE_URL
+  ? createPostgresUserStore({ connectionString: process.env.DATABASE_URL })
+  : null
+const userDb = userStore || db
 const PERFORMANCE_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000
 const EA_HEARTBEAT_TIMEOUT_MS = 30 * 1000
 
@@ -93,23 +101,35 @@ const requireAuth = (req, res, next) => {
 }
 
 // Promise wrappers so we stop nesting callbacks
-const run = (database, sql, params = []) =>
-  new Promise((resolve, reject) => {
+const run = (database, sql, params = []) => {
+  if (userStore && database === userStore) {
+    return userStore.run(database, sql, params)
+  }
+  return new Promise((resolve, reject) => {
     database.run(sql, params, function (err) {
       if (err) reject(err)
       else resolve(this)
     })
   })
+}
 
-const get = (database, sql, params = []) =>
-  new Promise((resolve, reject) => {
+const get = (database, sql, params = []) => {
+  if (userStore && database === userStore) {
+    return userStore.get(database, sql, params)
+  }
+  return new Promise((resolve, reject) => {
     database.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)))
   })
+}
 
-const all = (database, sql, params = []) =>
-  new Promise((resolve, reject) => {
+const all = (database, sql, params = []) => {
+  if (userStore && database === userStore) {
+    return userStore.all(database, sql, params)
+  }
+  return new Promise((resolve, reject) => {
     database.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)))
   })
+}
 
 const asyncRoute = (handler) => (req, res) =>
   Promise.resolve(handler(req, res)).catch((error) => {
@@ -354,6 +374,8 @@ const initDatabases = async () => {
       [key, value]
     )
   }
+
+  if (userStore) await userStore.init(db, all)
 }
 // ============================================================
 // ROUTES
@@ -526,7 +548,7 @@ app.post(
     let result
     try {
       result = await run(
-        db,
+        userDb,
         `INSERT INTO users
            (first_name, last_name, email, country, city, address, password)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -541,7 +563,7 @@ app.post(
         ]
       )
     } catch (err) {
-      if (String(err.message).includes('UNIQUE')) {
+      if (err.code === '23505' || String(err.message).includes('UNIQUE')) {
         return res
           .status(409)
           .json({ success: false, error: 'Email already exists' })
@@ -550,7 +572,7 @@ app.post(
     }
 
     const user = {
-      id: result.lastID,
+      id: Number(result.lastID),
       first_name: first_name || '',
       last_name: last_name || '',
       email: normalizedEmail,
@@ -602,7 +624,7 @@ app.post(
     if (!email || !password) return invalid()
 
     const normalizedEmail = String(email).trim().toLowerCase()
-    const user = await get(db, 'SELECT * FROM users WHERE email = ?', [
+    const user = await get(userDb, 'SELECT * FROM users WHERE email = ?', [
       normalizedEmail,
     ])
 
@@ -848,7 +870,7 @@ const requireAdmin = (req, res, next) => {
 app.use(
   '/api',
   createLicenseRouter({
-    db,
+    db: userDb,
     requireAuth,
     requireAdmin,
     run,
@@ -865,7 +887,7 @@ app.get(
   requireAdmin,
   asyncRoute(async (req, res) => {
     const rows = await all(
-      db,
+      userDb,
       `SELECT id, first_name, last_name, email, country, city, created_at
        FROM users ORDER BY id DESC`
     )
@@ -876,11 +898,11 @@ app.get(
 app.get(
   '/api/stats/users',
   asyncRoute(async (req, res) => {
-    const row = await get(db, 'SELECT COUNT(*) AS total FROM users')
+    const row = await get(userDb, 'SELECT COUNT(*) AS total FROM users')
 
     res.json({
       success: true,
-      totalUsers: row.total || 0,
+      totalUsers: Number(row.total || 0),
     })
   })
 )

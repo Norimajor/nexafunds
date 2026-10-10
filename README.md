@@ -11,6 +11,25 @@ The dashboard also proxies the live CPI, PPI, and FOMC forecasts from the same
 service at `GET /api/economic/latest`. Missing upstream prediction files are
 returned as unavailable data; the dashboard does not fall back to hardcoded values.
 
+## Persistent account registration
+
+Production requires `DATABASE_URL` for a hosted PostgreSQL database (for example,
+a Neon database). Add its connection string to the Render API service's environment
+variables before deploying this version. Do not set it as a `VITE_*` variable or
+commit it. The API stores account emails/password hashes and EA licenses in
+PostgreSQL, and the dashboard's registered-user counter is calculated from those
+persistent account rows. A first startup imports users and EA licenses from the
+existing SQLite database when that file is available and the PostgreSQL database
+does not yet contain users.
+
+Without `DATABASE_URL`, the production API intentionally refuses to start instead
+of silently accepting registrations into temporary storage. Other local SQLite data
+(such as MT5 telemetry and demo transactions/settings) is separate from this
+account/license store. Render's free filesystem may not retain the old SQLite file
+through a deployment; if automatic import cannot see it, existing users may need to
+register again. Once this PostgreSQL setup is active, new account records and the
+registered-user count survive API restarts and redeploys.
+
 ## MT5 EA account verification and licensing
 
 After creating an account, clients register their broker, exact MT5 server, account

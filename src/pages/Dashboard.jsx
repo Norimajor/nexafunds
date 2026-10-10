@@ -739,9 +739,9 @@ const goTo = (labelName) => {
               </h2>
               <p className={`relative mt-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                 {user.first_name}, welcome to <span className="font-semibold text-sky-500">NexaFunds</span>, where you get
-                to interact with{' '}
+                to join{' '}
                 <span className="font-semibold text-emerald-500">
-                  {totalUsers} active {totalUsers === 1 ? 'trader' : 'traders'}
+                  {totalUsers} registered {totalUsers === 1 ? 'member' : 'members'}
                 </span>{' '}
                 and follow live portfolio performance as our trading community grows.
               </p>

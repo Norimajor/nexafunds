@@ -1,6 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BrainCircuit, CheckCheck, ChevronRight, Menu, Moon, Paperclip, Send, Sun } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  BrainCircuit,
+  ChartNoAxesCombined,
+  CheckCheck,
+  Compass,
+  ExternalLink,
+  House,
+  Send,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react'
+import { PortalPageLayout } from '../components/PortalSidebar'
 
 const API_BASE = (
   import.meta.env.VITE_NEXA_AI_API_URL ||
@@ -8,64 +20,704 @@ const API_BASE = (
 ).replace(/\/$/, '')
 const USER_API_BASE = 'https://nexafunds-app.onrender.com'
 const ANONYMOUS_ID_KEY = 'nexafunds-ai-user-id'
-const CONVERSATION_KEY = 'nexafunds-ai-conversation'
+const CONVERSATION_KEY = 'nexafunds-ai-conversation-v2'
+const MODE_KEY = `${CONVERSATION_KEY}-mode`
 const makeId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`
-const getAnonymousId = () => { const existing = localStorage.getItem(ANONYMOUS_ID_KEY); if (existing) return existing; const id = `anonymous-${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`; localStorage.setItem(ANONYMOUS_ID_KEY, id); return id }
-const getErrorMessage = (data, status) => data?.error || data?.detail || data?.message || `NEXA AI returned HTTP ${status}. Please try again.`
+const timeNow = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const makeMessage = (role, content, extra = {}) => ({
+  id: makeId(),
+  role,
+  content,
+  time: timeNow(),
+  ...extra,
+})
 
-export async function sendChatMessage(message, userId) {
-  const response = await fetch(`${API_BASE}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, user_id: userId }) })
+const getAnonymousId = () => {
+  const existing = localStorage.getItem(ANONYMOUS_ID_KEY)
+  if (existing) return existing
+  const id = `anonymous-${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+  localStorage.setItem(ANONYMOUS_ID_KEY, id)
+  return id
+}
+
+const getErrorMessage = (data, status) =>
+  data?.error ||
+  data?.detail ||
+  data?.message ||
+  `NEXA AI returned HTTP ${status}. Please try again.`
+
+const startOptions = [
+  { label: 'Help me navigate NexaFunds', value: 'start-navigation', icon: Compass },
+  { label: 'Test or edit a trading strategy', value: 'start-strategy', icon: BrainCircuit },
+]
+
+const navigationTopics = [
+  {
+    label: 'Dashboard overview',
+    value: 'dashboard',
+    icon: House,
+    path: '/dashboard',
+    description: 'Account summary, MT5 status, performance, and recent activity.',
+    details:
+      'The Dashboard is your main overview. It brings together account and MT5 status, open positions, performance, recent activity, the EA journal, and preferences. Use the left sidebar to move between the main areas.',
+  },
+  {
+    label: 'EA access and license',
+    value: 'ea-access',
+    icon: ShieldCheck,
+    path: '/dashboard?section=ea-access',
+    description: 'Register an MT5 account, follow verification, and access an approved EA.',
+    details:
+      'Open EA access from the Dashboard sidebar. Enter your broker, exact MT5 server name, account number, and demo/live type, then confirm the IB details. NexaFunds reviews requests; after approval, your account-bound key and download appear when the EA file is available.',
+  },
+  {
+    label: 'Portfolio',
+    value: 'portfolio',
+    icon: ChartNoAxesCombined,
+    path: '/portfolio',
+    description: 'Review portfolio values, holdings, and allocation.',
+    details:
+      'Portfolio shows the account summary, active holdings, and allocation view. The values depend on the account and data currently connected to the portal.',
+  },
+  {
+    label: 'Transactions',
+    value: 'transactions',
+    icon: ArrowLeftRight,
+    path: '/transactions',
+    details:
+      'Transactions shows recent account activity and lets you record a deposit or withdrawal amount with a note. These entries are portal records; adding one does not transfer money.',
+    description: 'Review activity or record a deposit/withdrawal entry.',
+  },
+  {
+    label: 'Strategy AI',
+    value: 'strategy-ai',
+    icon: BrainCircuit,
+    path: '/strategy-ai',
+    details:
+      'Strategy AI has two modes: guided website navigation and strategy testing. Choose strategy testing to describe or revise an idea in your own words. A backtest is historical evidence, not a promise of future results.',
+    description: 'Get guided help or describe a strategy to test and revise.',
+  },
+  {
+    label: 'Sign in or create an account',
+    value: 'account',
+    icon: UserRound,
+    path: '/login',
+    details:
+      'Use Login to sign in with your registered email and password. New users can choose Create an account from the home page or Login page. There is currently no self-service password-reset link in the portal.',
+    description: 'Find the login and account registration pages.',
+  },
+  {
+    label: 'Admin license review',
+    value: 'admin',
+    icon: ShieldCheck,
+    path: '/admin/licenses',
+    details:
+      'The Admin license review page is for NexaFunds staff. The admin API key is required to open the request queue, upload the EA, and approve or reject account requests. Regular customer accounts do not have admin access.',
+    description: 'Staff-only request queue and EA upload page.',
+  },
+]
+
+const findTopic = (value) => navigationTopics.find((topic) => topic.value === value)
+const choiceIcons = {
+  'start-navigation': Compass,
+  'start-strategy': BrainCircuit,
+  dashboard: House,
+  'ea-access': ShieldCheck,
+  portfolio: ChartNoAxesCombined,
+  transactions: ArrowLeftRight,
+  'strategy-ai': BrainCircuit,
+  account: UserRound,
+  admin: ShieldCheck,
+  'navigation-menu': Compass,
+  'finish-navigation': CheckCheck,
+}
+
+async function sendChatMessage(message, userId) {
+  const response = await fetch(`${API_BASE}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, user_id: userId }),
+  })
   const data = await response.json().catch(() => null)
   if (!response.ok) throw new Error(getErrorMessage(data, response.status))
   return data
 }
-export async function getBacktestJob(jobId) {
+
+async function getBacktestJob(jobId) {
   const response = await fetch(`${API_BASE}/backtest/jobs/${encodeURIComponent(jobId)}`)
   const data = await response.json().catch(() => null)
   if (!response.ok) throw new Error(getErrorMessage(data, response.status))
   return data
 }
-const value = (object, keys, fallback = null) => keys.map((key) => object?.[key]).find((item) => item !== undefined && item !== null && item !== '') ?? fallback
-const display = (item, fallback = 'Not available') => item === null || item === undefined || item === '' ? fallback : typeof item === 'boolean' ? item ? 'Yes' : 'No' : String(item)
-const formatDuration = (seconds) => { if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return 'estimating remaining time...'; const amount = Math.max(0, Math.round(Number(seconds))); return amount < 60 ? `about ${amount} second${amount === 1 ? '' : 's'} remaining` : `about ${Math.round(amount / 60)} minute${Math.round(amount / 60) === 1 ? '' : 's'} remaining` }
+
+const value = (object, keys, fallback = null) =>
+  keys
+    .map((key) => object?.[key])
+    .find((item) => item !== undefined && item !== null && item !== '') ?? fallback
+
+const display = (item, fallback = 'Not available') =>
+  item === null || item === undefined || item === ''
+    ? fallback
+    : typeof item === 'boolean'
+      ? item
+        ? 'Yes'
+        : 'No'
+      : String(item)
+
+const formatDuration = (seconds) => {
+  if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) {
+    return 'Estimating remaining time…'
+  }
+  const amount = Math.max(0, Math.round(Number(seconds)))
+  return amount < 60
+    ? `About ${amount} second${amount === 1 ? '' : 's'} remaining`
+    : `About ${Math.round(amount / 60)} minute${Math.round(amount / 60) === 1 ? '' : 's'} remaining`
+}
 
 function Progress({ progress }) {
   const percent = Math.max(0, Math.min(100, Number(progress.progress || 0) * 100))
-  return <div className="mt-4 rounded-2xl border border-sky-400/20 bg-sky-400/[0.06] p-4"><div className="flex justify-between text-xs text-slate-300"><span>Backtest progress</span><strong className="text-sky-300">{Math.round(percent)}%</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-300 transition-all" style={{ width: `${percent}%` }} /></div><div className="mt-3 grid gap-2 text-xs text-slate-400 sm:grid-cols-2"><span>{display(value(progress, ['current_dataset', 'dataset', 'symbol']), 'Dataset pending')}</span><span>{display(value(progress, ['current_combination', 'combination']), 'Combination pending')}</span><span>{display(progress.completed, '0')} / {display(progress.total, 'estimating')} completed</span><span>{display(progress.elapsed_seconds, '...')} elapsed</span><span className="sm:col-span-2">{formatDuration(value(progress, ['eta_seconds', 'estimated_remaining_seconds']))}</span></div></div>
+  return (
+    <div className="mt-4 rounded-2xl border border-[#5bd1a7]/20 bg-[#5bd1a7]/[0.06] p-4">
+      <div className="flex justify-between text-xs text-[#d1d5cc]">
+        <span>Backtest progress</span>
+        <strong className="text-[#5bd1a7]">{Math.round(percent)}%</strong>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/30">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#5bd1a7] to-[#eac16e] transition-all"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <div className="mt-3 grid gap-2 text-xs text-[#a8b0a9] sm:grid-cols-2">
+        <span>{display(value(progress, ['current_dataset', 'dataset', 'symbol']), 'Dataset pending')}</span>
+        <span>{display(value(progress, ['current_combination', 'combination']), 'Combination pending')}</span>
+        <span>{display(progress.completed, '0')} / {display(progress.total, 'Estimating')} completed</span>
+        <span>{display(progress.elapsed_seconds, '…')} elapsed</span>
+        <span className="sm:col-span-2">{formatDuration(value(progress, ['eta_seconds', 'estimated_remaining_seconds']))}</span>
+      </div>
+    </div>
+  )
 }
-const resultFields = [['Symbol', ['symbol']], ['Timeframe', ['timeframe']], ['EA platform', ['ea_platform', 'platform']], ['Trades', ['trades', 'total_trades', 'number_of_trades']], ['Win rate', ['win_rate', 'winning_rate']], ['Profit factor', ['profit_factor']], ['Expectancy', ['expectancy']], ['Net profit / return', ['net_profit', 'net_return', 'return', 'total_return']], ['Maximum drawdown', ['maximum_drawdown', 'max_drawdown']], ['Walk-forward', ['walk_forward_status', 'walk_forward_validation', 'validation_status']]]
+
+const resultFields = [
+  ['Symbol', ['symbol']],
+  ['Timeframe', ['timeframe']],
+  ['EA platform', ['ea_platform', 'platform']],
+  ['Trades', ['trades', 'total_trades', 'number_of_trades']],
+  ['Win rate', ['win_rate', 'winning_rate']],
+  ['Profit factor', ['profit_factor']],
+  ['Expectancy', ['expectancy']],
+  ['Net profit / return', ['net_profit', 'net_return', 'return', 'total_return']],
+  ['Maximum drawdown', ['maximum_drawdown', 'max_drawdown']],
+  ['Walk-forward', ['walk_forward_status', 'walk_forward_validation', 'validation_status']],
+]
+
 function Result({ job }) {
   const result = job?.result || job?.results || job?.data || job
   const candidates = value(result, ['candidates', 'ranked_candidates', 'candidate_strategies'], [])
-  return <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] p-4"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">Historical backtest evidence</p><p className="mt-2 text-sm text-slate-200">{display(value(result, ['summary', 'message']), 'The historical backtest completed. Review these results as evidence, not a guarantee of future profitability.')}</p><div className="mt-4 grid grid-cols-3 gap-3 text-xs"><div><p className="text-slate-500">Datasets tested</p><p className="mt-1 text-lg font-semibold text-slate-100">{display(value(result, ['datasets_tested', 'tested_datasets', 'total_datasets']))}</p></div><div><p className="text-slate-500">Skipped</p><p className="mt-1 text-lg font-semibold text-slate-100">{display(value(result, ['skipped_datasets', 'datasets_skipped']))}</p></div><div><p className="text-slate-500">Candidates</p><p className="mt-1 text-lg font-semibold text-slate-100">{display(value(result, ['aggregate_candidate_count', 'candidate_count', 'total_candidates']))}</p></div></div>{Array.isArray(candidates) && candidates.length > 0 && <div className="mt-4 space-y-3">{candidates.map((candidate, index) => <div key={candidate.id || index} className="rounded-2xl border border-white/[0.08] bg-slate-950/30 p-4"><div className="mb-3 flex items-center justify-between"><p className="font-semibold text-slate-100">#{index + 1} {display(value(candidate, ['strategy', 'combination', 'name', 'strategy_name']), 'Candidate')}</p><span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Historical evidence</span></div><div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">{resultFields.map(([label, keys]) => <div key={label}><p className="text-slate-500">{label}</p><p className="mt-1 break-words text-slate-200">{display(value(candidate, keys))}</p></div>)}</div></div>)}</div>}</div>
+  return (
+    <div className="mt-4 rounded-2xl border border-[#5bd1a7]/20 bg-[#5bd1a7]/[0.06] p-4">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#5bd1a7]">
+        Historical backtest evidence
+      </p>
+      <p className="mt-2 text-sm text-[#f3f1e9]">
+        {display(
+          value(result, ['summary', 'message']),
+          'The historical backtest completed. Treat these results as evidence, not a guarantee of future profitability.'
+        )}
+      </p>
+      <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
+        {[
+          ['Datasets tested', ['datasets_tested', 'tested_datasets', 'total_datasets']],
+          ['Skipped', ['skipped_datasets', 'datasets_skipped']],
+          ['Candidates', ['aggregate_candidate_count', 'candidate_count', 'total_candidates']],
+        ].map(([label, keys]) => (
+          <div key={label}>
+            <p className="text-[#a8b0a9]">{label}</p>
+            <p className="mt-1 text-lg font-semibold text-[#f3f1e9]">
+              {display(value(result, keys))}
+            </p>
+          </div>
+        ))}
+      </div>
+      {Array.isArray(candidates) && candidates.length > 0 && (
+        <div className="mt-4 space-y-3">
+          {candidates.map((candidate, index) => (
+            <div
+              key={candidate.id || index}
+              className="rounded-2xl border border-white/[0.08] bg-black/20 p-4"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <p className="font-semibold text-[#f3f1e9]">
+                  #{index + 1} {display(value(candidate, ['strategy', 'combination', 'name', 'strategy_name']), 'Candidate')}
+                </p>
+                <span className="text-[10px] uppercase tracking-[0.12em] text-[#a8b0a9]">
+                  Historical evidence
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+                {resultFields.map(([label, keys]) => (
+                  <div key={label}>
+                    <p className="text-[#a8b0a9]">{label}</p>
+                    <p className="mt-1 break-words text-[#f3f1e9]">
+                      {display(value(candidate, keys))}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
-function Message({ message }) {
+
+function Message({ message, onChoice, onNavigate }) {
   const assistant = message.role === 'assistant'
-  return <div className={`flex items-end gap-3 ${assistant ? 'justify-start' : 'justify-end'}`}><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${assistant ? 'order-first border-cyan-400/60 bg-gradient-to-br from-blue-600 to-cyan-400 shadow-[0_0_22px_rgba(0,176,255,.5)]' : 'order-last hidden border-blue-300/30 bg-blue-500/20 sm:flex'}`}><BrainCircuit size={23} strokeWidth={1.8} /></div><div className={`max-w-[88%] rounded-[20px] px-4 py-3 text-[13px] leading-5 shadow-lg sm:max-w-[70%] ${assistant ? 'rounded-bl-md border border-blue-400/20 bg-gradient-to-br from-blue-950/90 to-blue-900/70 text-slate-100' : 'rounded-br-md bg-gradient-to-r from-blue-600 to-cyan-500 text-white'}`}><p className="whitespace-pre-wrap">{message.content}</p><div className={`mt-2 flex items-center gap-2 text-[10px] ${assistant ? 'text-blue-200/60' : 'justify-end text-white/70'}`}><span>{message.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>{!assistant && <CheckCheck size={14} />}</div>{message.questions?.length > 0 && <div className="mt-3 space-y-2 border-t border-white/10 pt-3">{message.questions.map((question, index) => <p key={question.field || index} className="text-slate-300"><span className="font-medium text-cyan-300">{question.field ? `${question.field}: ` : ''}</span>{question.question || question}</p>)}</div>}{message.progress && <Progress progress={message.progress} />}{message.job && <Result job={message.job} />}</div></div>
+  return (
+    <div className={`flex items-end gap-3 ${assistant ? 'justify-start' : 'justify-end'}`}>
+      {assistant && (
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#eac16e]/30 bg-[#102b25] text-[#eac16e]">
+          <BrainCircuit size={21} />
+        </div>
+      )}
+      <div
+        className={`max-w-[92%] rounded-[20px] px-4 py-3 text-[13px] leading-5 shadow-lg sm:max-w-[78%] ${
+          assistant
+            ? 'rounded-bl-md border border-[#eac16e]/10 bg-[#10211d] text-[#f3f1e9]'
+            : 'rounded-br-md bg-gradient-to-r from-[#286a54] to-[#347c60] text-white'
+        }`}
+      >
+        <p className="whitespace-pre-wrap">{message.content}</p>
+        <div className={`mt-2 flex items-center gap-2 text-[10px] ${assistant ? 'text-[#a8b0a9]' : 'justify-end text-white/70'}`}>
+          <span>{message.time || timeNow()}</span>
+          {!assistant && <CheckCheck size={14} />}
+        </div>
+
+        {message.questions?.length > 0 && (
+          <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+            {message.questions.map((question, index) => (
+              <p key={question.field || index} className="text-[#d1d5cc]">
+                <span className="font-medium text-[#eac16e]">
+                  {question.field ? `${question.field}: ` : ''}
+                </span>
+                {question.question || question}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {message.topic && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onNavigate(message.topic.path)}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#eac16e] to-[#5bd1a7] px-3 py-2 text-xs font-semibold text-[#0d1117] transition hover:brightness-110"
+            >
+              Open {message.topic.label}
+              <ExternalLink size={14} />
+            </button>
+          </div>
+        )}
+
+        {message.choices?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+            {message.choices.map((choice) => {
+            const Icon = typeof choice.icon === 'function' ? choice.icon : choiceIcons[choice.value]
+              return (
+                <button
+                  type="button"
+                  key={choice.value}
+                  disabled={message.choicesDisabled}
+                  onClick={() => onChoice(choice)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#eac16e]/20 bg-[#0b1714] px-3 py-2 text-left text-xs font-medium text-[#f3f1e9] transition hover:border-[#5bd1a7]/50 hover:bg-[#17382f] disabled:cursor-wait disabled:opacity-50"
+                >
+                  {Icon && <Icon size={15} className="text-[#eac16e]" />}
+                  {choice.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {message.progress && <Progress progress={message.progress} />}
+        {message.job && <Result job={message.job} />}
+      </div>
+    </div>
+  )
 }
-function Typing() { return <div className="flex items-end gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-400/60 bg-gradient-to-br from-blue-600 to-cyan-400"><BrainCircuit size={23} /></div><div className="rounded-2xl rounded-bl-md border border-blue-400/20 bg-blue-950/80 px-4 py-3 text-sm text-blue-100">NEXA AI is thinking...</div></div> }
+
+function Typing() {
+  return (
+    <div className="flex items-end gap-3" role="status" aria-live="polite">
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#eac16e]/30 bg-[#102b25] text-[#eac16e]">
+        <BrainCircuit size={21} />
+      </div>
+      <div className="rounded-2xl rounded-bl-md border border-[#eac16e]/10 bg-[#10211d] px-4 py-3 text-sm text-[#d1d5cc]">
+        NEXA AI is working…
+      </div>
+    </div>
+  )
+}
+
+const readSavedMessages = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CONVERSATION_KEY) || '[]')
+    return Array.isArray(saved) ? saved : []
+  } catch {
+    return []
+  }
+}
+
+const readSavedMode = () => {
+  const savedMode = localStorage.getItem(MODE_KEY)
+  return ['choose', 'navigation', 'strategy'].includes(savedMode) ? savedMode : 'choose'
+}
 
 export default function StrategyAI() {
   const navigate = useNavigate()
-  const [theme, setTheme] = useState(() => localStorage.getItem('nexafunds-theme') || 'dark')
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [user, setUser] = useState({ first_name: 'Investor' })
   const [userId, setUserId] = useState(() => getAnonymousId())
-  const [messages, setMessages] = useState(() => { try { return JSON.parse(localStorage.getItem(CONVERSATION_KEY) || '[]') } catch { return [] } })
+  const [messages, setMessages] = useState(() => {
+    const saved = readSavedMessages()
+    return saved.length > 0
+      ? saved
+      : [
+          makeMessage(
+            'assistant',
+            'Welcome to Strategy AI. What would you like help with today?',
+            { choices: startOptions }
+          ),
+        ]
+  })
   const [draft, setDraft] = useState('')
+  const [mode, setMode] = useState(readSavedMode)
   const [sending, setSending] = useState(false)
+  const [serviceStatus, setServiceStatus] = useState('checking')
   const bottomRef = useRef(null)
   const pollTimers = useRef(new Set())
 
-  useEffect(() => { document.documentElement.style.colorScheme = theme; localStorage.setItem('nexafunds-theme', theme) }, [theme])
-  useEffect(() => { localStorage.setItem(CONVERSATION_KEY, JSON.stringify(messages)); bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-  useEffect(() => { let cancelled = false; const timers = pollTimers.current; fetch(`${USER_API_BASE}/api/auth/me`, { credentials: 'include' }).then((response) => response.json()).then((data) => { if (!cancelled && data.success && data.user) { setUser(data.user); setUserId(String(data.user.id || data.user.user_id || data.user.email || getAnonymousId())) } }).catch(() => {}); return () => { cancelled = true; timers.forEach((timer) => window.clearTimeout(timer)) } }, [])
-  const updateMessage = (id, changes) => setMessages((current) => current.map((message) => message.id === id ? { ...message, ...changes } : message))
-  const pollJob = async (jobId, progressId) => { try { const job = await getBacktestJob(jobId); const status = String(job.status || job.state || '').toLowerCase(); if (status === 'completed') updateMessage(progressId, { content: 'The backtest is complete. Here are the ranked historical results.', progress: null, job }); else if (status === 'failed') updateMessage(progressId, { content: `The backtest could not be completed: ${display(job.error, 'The backend reported an unknown error.')}`, progress: null }); else { updateMessage(progressId, { progress: job }); const timer = window.setTimeout(() => { pollTimers.current.delete(timer); pollJob(jobId, progressId) }, 3000); pollTimers.current.add(timer) } } catch (error) { updateMessage(progressId, { content: `The backtest progress could not be loaded: ${error.message}. Please try again later.`, progress: null }) } }
-  const send = async () => { const message = draft.trim(); if (!message || sending) return; setMessages((current) => [...current, { id: makeId(), role: 'user', content: message, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]); setDraft(''); setSending(true); try { const data = await sendChatMessage(message, userId); if (!data || data.success !== true) throw new Error(data?.error || 'The NEXA AI service returned an invalid response.'); const responseMessage = { id: makeId(), role: 'assistant', content: data.message || 'I received your request.', questions: data.questions, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }; const status = String(data.status || '').toLowerCase(); if (['queued', 'running'].includes(status) && data.job_id) { responseMessage.content = data.message || 'I started the backtest. I will keep you updated here.'; responseMessage.progress = { progress: 0, status }; setMessages((current) => [...current, responseMessage]); pollJob(data.job_id, responseMessage.id) } else setMessages((current) => [...current, responseMessage]) } catch (error) { setMessages((current) => [...current, { id: makeId(), role: 'assistant', content: `I could not reach NEXA AI: ${error.message}. Please retry your message.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]) } finally { setSending(false) } }
+  useEffect(() => {
+    localStorage.setItem(CONVERSATION_KEY, JSON.stringify(messages))
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
-  const nav = [{ label: 'Overview', path: '/dashboard', icon: House }, { label: 'EA access', path: '/dashboard?section=ea-access', icon: ShieldCheck }, { label: 'Portfolio', path: '/portfolio', icon: ChartPie }, { label: 'Transactions', path: '/transactions', icon: ArrowLeftRight }, { label: 'Strategy AI', path: '/strategy-ai', icon: BrainCircuit }]
-  const sidebar = <><div className="mb-12 flex items-center gap-3"><div className="relative flex h-11 w-11 items-center justify-center text-4xl font-black italic text-white drop-shadow-[0_0_10px_rgba(0,190,255,.8)]"><span className="bg-gradient-to-br from-cyan-300 via-blue-500 to-violet-500 bg-clip-text text-transparent">N</span></div><div><h1 className="text-[21px] font-semibold tracking-tight text-slate-100">NEXA <span className="text-slate-300">FUNDS</span></h1><p className="text-[9px] font-bold tracking-[0.28em] text-cyan-400">TRADE · GROW · ACHIEVE</p></div></div><nav className="space-y-3">{nav.map(({ label, path, icon: Icon }) => <button key={label} type="button" onClick={() => { setMobileOpen(false); navigate(path) }} className={`group flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-left text-[15px] font-medium transition ${label === 'Strategy AI' ? 'bg-gradient-to-r from-blue-600 via-blue-500 to-violet-600 text-white shadow-[0_8px_25px_rgba(37,99,235,.35)]' : 'text-blue-100/80 hover:bg-blue-500/10'}`}><Icon size={24} strokeWidth={1.8} /><span>{label}</span>{label === 'Strategy AI' && <ChevronRight className="ml-auto" size={22} />}</button>)}</nav><div className="mt-auto rounded-3xl border border-blue-400/20 bg-gradient-to-br from-blue-950/70 to-slate-950/80 p-5 shadow-[0_12px_30px_rgba(0,0,0,.2)]"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-200/70">Engine</p><span className="flex items-center gap-2 text-xs font-medium text-emerald-300"><i className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399]" />Online</span></div><h3 className="mt-4 text-xl font-semibold">NEXA AI</h3><p className="mt-1 text-sm text-blue-100/60">Conversational strategy research</p></div></>
+  useEffect(() => {
+    localStorage.setItem(MODE_KEY, mode)
+  }, [mode])
 
-  return <div className="min-h-screen overflow-hidden bg-[#020d20] text-slate-100"><div className="pointer-events-none fixed inset-0 opacity-60" style={{ backgroundImage: 'radial-gradient(circle at 74% 4%, rgba(0,115,255,.34), transparent 27%), radial-gradient(circle at 78% 66%, rgba(63,36,190,.28), transparent 36%), linear-gradient(120deg, rgba(2,15,36,.9), rgba(2,10,24,.96))' }} /><div className="relative flex min-h-screen"><aside className="hidden w-[320px] shrink-0 flex-col border-r border-blue-300/10 bg-[#031124]/90 px-6 py-7 backdrop-blur-xl lg:flex">{sidebar}</aside>{mobileOpen && <div className="fixed inset-0 z-50 lg:hidden"><div className="absolute inset-0 bg-slate-950/80" onClick={() => setMobileOpen(false)} /><aside className="absolute left-0 top-0 flex h-full w-[300px] flex-col bg-[#031124] px-6 py-7">{sidebar}</aside></div>}<main className="min-w-0 flex-1 px-5 py-6 sm:px-8 lg:px-10"><header className="relative mb-6 flex items-center justify-between overflow-hidden pb-3"><div className="pointer-events-none absolute -right-10 -top-32 h-64 w-[720px] opacity-45" style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent 0 22px, rgba(55,150,255,.45) 23px 24px, transparent 25px 43px), linear-gradient(170deg, transparent 0 50%, rgba(25,100,220,.45) 51% 52%, transparent 53%)', transform: 'skewY(-8deg)' }} /><div className="relative flex items-center gap-4"><button type="button" onClick={() => setMobileOpen(true)} className="rounded-xl border border-blue-300/20 bg-blue-500/10 p-2 lg:hidden"><Menu size={20} /></button><div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/70 bg-gradient-to-br from-blue-600 to-cyan-400 shadow-[0_0_28px_rgba(0,166,255,.7)]"><BrainCircuit size={31} /></div><div><h2 className="text-[30px] font-semibold tracking-tight text-slate-100 sm:text-[36px]">Strategy <span className="text-cyan-400">AI</span></h2><p className="text-sm text-blue-100/70">Research, test and validate trading strategies with historical market data.</p></div></div><div className="relative flex items-center gap-4"><div className="hidden items-center gap-3 rounded-full border border-blue-300/30 bg-blue-950/40 px-5 py-2.5 text-xs font-semibold tracking-wide sm:flex">NEXA AI ENGINE <span className="flex items-center gap-2 rounded-full bg-emerald-500/20 px-3 py-1.5 text-emerald-300"><i className="h-2 w-2 rounded-full bg-emerald-400" />Online</span></div><button type="button" aria-label="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="flex items-center gap-2 rounded-full border border-blue-300/30 bg-blue-950/40 p-2 text-blue-100"><Sun size={18} /><span className="h-7 w-7 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,.8)]" /><Moon size={17} /></button></div></header><section className="relative flex h-[calc(100vh-155px)] min-h-[560px] flex-col overflow-hidden rounded-[24px] border border-blue-400/60 bg-[#061a3d]/70 shadow-[0_0_35px_rgba(0,115,255,.15)] backdrop-blur-xl"><div className="pointer-events-none absolute inset-0 opacity-35" style={{ background: 'radial-gradient(ellipse at 84% 18%, rgba(24,88,255,.65), transparent 42%), radial-gradient(ellipse at 85% 88%, rgba(80,24,207,.5), transparent 43%)' }} /><div className="relative min-h-0 flex-1 space-y-10 overflow-y-auto px-6 py-8 sm:px-7 sm:py-8">{messages.length === 0 && <div className="flex min-h-full items-center justify-center text-center text-sm text-blue-100/60">Start a conversation about a strategy, symbol, timeframe, or backtest constraints.</div>}{messages.map((message) => <Message key={message.id} message={message} />)}{sending && <Typing />}<div ref={bottomRef} /></div><form onSubmit={(event) => { event.preventDefault(); send() }} className="relative m-5 mt-0 flex items-end gap-4 rounded-[22px] border border-cyan-400/80 bg-[#06164a]/90 p-3 shadow-[0_0_20px_rgba(0,180,255,.25),inset_0_0_24px_rgba(13,43,150,.5)] sm:m-5 sm:p-3.5"><button type="button" aria-label="Attach file" className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full border border-blue-300/20 bg-blue-950/40 text-blue-100 sm:flex"><Paperclip size={21} /></button><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send() } }} rows={1} placeholder="Ask about a strategy or start a backtest..." className="min-h-[48px] flex-1 resize-none bg-transparent px-2 py-3 text-sm text-white outline-none placeholder:text-blue-100/60" /><button type="submit" disabled={sending || !draft.trim()} aria-label="Send message" className="flex h-12 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-[0_0_20px_rgba(0,160,255,.35)] transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40"><Send size={23} /></button></form></section></main></div></div>
+  useEffect(() => {
+    let cancelled = false
+    const timers = pollTimers.current
+    fetch(`${USER_API_BASE}/api/auth/me`, { credentials: 'include' })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled && data.success && data.user) {
+          setUserId(String(data.user.id || data.user.user_id || data.user.email || getAnonymousId()))
+        }
+      })
+      .catch((error) => console.warn('Unable to identify the Strategy AI user:', error))
+
+    return () => {
+      cancelled = true
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 12000)
+
+    fetch(`${API_BASE}/health`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Health check returned HTTP ${response.status}`)
+        return response.json()
+      })
+      .then((data) => {
+        if (!cancelled) setServiceStatus(data?.status === 'healthy' ? 'online' : 'offline')
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('NEXA AI health check failed:', error)
+          setServiceStatus('offline')
+        }
+      })
+      .finally(() => window.clearTimeout(timer))
+
+    return () => {
+      cancelled = true
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [])
+
+  const updateMessage = useCallback((id, changes) => {
+    setMessages((current) =>
+      current.map((message) => (message.id === id ? { ...message, ...changes } : message))
+    )
+  }, [])
+
+  const addStartChoices = useCallback((content = 'What would you like help with next?') => {
+    setMode('choose')
+    setMessages((current) => [
+      ...current,
+      makeMessage('assistant', content, { choices: startOptions }),
+    ])
+  }, [])
+
+  const choose = useCallback((choice) => {
+    setMessages((current) => [
+      ...current,
+      makeMessage('user', choice.label),
+    ])
+
+    if (choice.value === 'start-navigation') {
+      setMode('navigation')
+      setMessages((current) => [
+        ...current,
+        makeMessage(
+          'assistant',
+          'Sure — choose the part of NexaFunds you want to learn about. You can use the buttons below; no typing is needed.',
+          { choices: navigationTopics }
+        ),
+      ])
+      return
+    }
+
+    if (choice.value === 'start-strategy') {
+      setMode('strategy')
+      setMessages((current) => [
+        ...current,
+        makeMessage(
+          'assistant',
+          'Describe a strategy you want to test, or tell me what to change in the strategy you are discussing. Include the symbol, timeframe, entry rules, exits, and risk limits if you know them. I will ask for details that are missing.'
+        ),
+      ])
+      return
+    }
+
+    if (choice.value === 'navigation-menu') {
+      setMode('navigation')
+      setMessages((current) => [
+        ...current,
+        makeMessage('assistant', 'Which NexaFunds area would you like to explore?', {
+          choices: navigationTopics,
+        }),
+      ])
+      return
+    }
+
+    if (choice.value === 'finish-navigation') {
+      addStartChoices('You’re welcome! Choose another option whenever you need help.')
+      return
+    }
+
+    const topic = findTopic(choice.value)
+    if (topic) {
+      setMode('navigation')
+      setMessages((current) => [
+        ...current,
+        makeMessage('assistant', topic.details, {
+          topic: { label: topic.label, path: topic.path },
+          choices: [
+            { label: 'Explore another area', value: 'navigation-menu', icon: Compass },
+            { label: 'I’m all set', value: 'finish-navigation', icon: CheckCheck },
+            { label: 'Test a strategy instead', value: 'start-strategy', icon: BrainCircuit },
+          ],
+        }),
+      ])
+    }
+  }, [addStartChoices])
+
+  const pollJob = useCallback(async (jobId, progressId) => {
+    try {
+      const job = await getBacktestJob(jobId)
+      const status = String(job.status || job.state || '').toLowerCase()
+      if (status === 'completed') {
+        updateMessage(progressId, {
+          content: 'The backtest is complete. Here are the ranked historical results.',
+          progress: null,
+          job,
+        })
+      } else if (status === 'failed') {
+        updateMessage(progressId, {
+          content: `The backtest could not be completed: ${display(job.error, 'The backend reported an unknown error.')}`,
+          progress: null,
+        })
+      } else {
+        updateMessage(progressId, { progress: job })
+        const timer = window.setTimeout(() => {
+          pollTimers.current.delete(timer)
+          pollJob(jobId, progressId)
+        }, 3000)
+        pollTimers.current.add(timer)
+      }
+    } catch (error) {
+      updateMessage(progressId, {
+        content: `The backtest progress could not be loaded: ${error.message}. Please try again later.`,
+        progress: null,
+      })
+    }
+  }, [updateMessage])
+
+  const send = async (event) => {
+    event?.preventDefault()
+    const message = draft.trim()
+    if (!message || sending || mode !== 'strategy') return
+
+    setMessages((current) => [
+      ...current,
+      makeMessage('user', message),
+      makeMessage('assistant', 'Sending your strategy to NEXA AI…', { pending: true }),
+    ])
+    setDraft('')
+    setSending(true)
+    try {
+      const data = await sendChatMessage(message, userId)
+      if (!data || data.success !== true) {
+        throw new Error(data?.error || 'The NEXA AI service returned an invalid response.')
+      }
+      const status = String(data.status || '').toLowerCase()
+      const responseMessage = makeMessage(
+        'assistant',
+        data.message || 'I received your request.',
+        {
+          questions: data.questions,
+          progress: ['queued', 'running'].includes(status) ? { progress: 0, status } : null,
+        }
+      )
+      setMessages((current) => [
+        ...current.filter((item) => !item.pending),
+        responseMessage,
+      ])
+      if (['queued', 'running'].includes(status) && data.job_id) {
+        pollJob(data.job_id, responseMessage.id)
+      }
+    } catch (error) {
+      setDraft(message)
+      setMessages((current) => [
+        ...current.filter((item) => !item.pending),
+        makeMessage(
+          'assistant',
+          `I couldn’t reach NEXA AI: ${error.message}. Your strategy text is still available in the message above; please try sending it again.`
+        ),
+      ])
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const restart = () => {
+    pollTimers.current.forEach((timer) => window.clearTimeout(timer))
+    pollTimers.current.clear()
+    setMode('choose')
+    setDraft('')
+    setMessages([
+      makeMessage('assistant', 'Welcome to Strategy AI. What would you like help with today?', {
+        choices: startOptions,
+      }),
+    ])
+  }
+
+  return (
+    <PortalPageLayout activeLabel="Strategy AI">
+      <div className="min-h-screen p-4 text-[#f3f1e9] sm:p-7 lg:p-9">
+        <header className="mx-auto mb-5 flex max-w-6xl flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#eac16e]/25 bg-[#102b25] text-[#eac16e]">
+              <BrainCircuit size={26} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Strategy <span className="text-[#5bd1a7]">AI</span>
+              </h1>
+              <p className="text-xs text-[#a8b0a9] sm:text-sm">
+                Guided website help or historical strategy testing.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div
+              className="flex items-center gap-2 rounded-full border border-white/10 bg-[#10211d] px-3 py-2 text-xs"
+              role="status"
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  serviceStatus === 'online'
+                    ? 'bg-[#5bd1a7]'
+                    : serviceStatus === 'checking'
+                      ? 'bg-[#eac16e]'
+                      : 'bg-red-400'
+                }`}
+              />
+              NEXA AI {serviceStatus}
+            </div>
+            <button
+              type="button"
+              onClick={restart}
+              className="rounded-xl border border-[#eac16e]/20 bg-[#10211d] px-3 py-2 text-xs font-medium text-[#eac16e] transition hover:bg-[#17382f]"
+            >
+              Start over
+            </button>
+          </div>
+        </header>
+
+        <section className="mx-auto flex h-[calc(100vh-185px)] min-h-[500px] max-w-6xl flex-col overflow-hidden rounded-3xl border border-[#eac16e]/15 bg-gradient-to-br from-[#10211d]/95 to-[#0b100e]/95 shadow-[0_24px_70px_rgba(0,0,0,.28)]">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-7 sm:py-7">
+            {messages.map((message) => (
+              <Message
+                key={message.id}
+                message={message}
+                onChoice={choose}
+                onNavigate={(path) => navigate(path)}
+              />
+            ))}
+            {sending && <Typing />}
+            <div ref={bottomRef} />
+          </div>
+
+          {mode === 'strategy' ? (
+            <form
+              onSubmit={send}
+              className="m-3 mt-0 flex items-end gap-3 rounded-2xl border border-[#5bd1a7]/25 bg-black/20 p-3 sm:m-5 sm:mt-0"
+            >
+              <label htmlFor="strategy-message" className="sr-only">
+                Describe or edit a strategy
+              </label>
+              <textarea
+                id="strategy-message"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    send()
+                  }
+                }}
+                rows={2}
+                maxLength={4000}
+                placeholder="Describe a strategy, or tell NEXA AI what you want to change…"
+                className="max-h-40 min-h-12 flex-1 resize-y bg-transparent px-2 py-2 text-sm text-[#f3f1e9] outline-none placeholder:text-[#a8b0a9]"
+              />
+              <button
+                type="submit"
+                disabled={sending || !draft.trim()}
+                aria-label="Send strategy"
+                className="flex h-11 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-[#eac16e] to-[#5bd1a7] text-[#0d1117] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Send size={19} />
+              </button>
+            </form>
+          ) : (
+            <p className="border-t border-white/[0.06] px-5 py-3 text-center text-xs text-[#a8b0a9]">
+              {mode === 'navigation'
+                ? 'Choose an option above to continue. Navigation help does not require typing.'
+                : 'Choose a mode above to get started.'}
+            </p>
+          )}
+        </section>
+      </div>
+    </PortalPageLayout>
+  )
 }

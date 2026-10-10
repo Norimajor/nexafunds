@@ -184,7 +184,7 @@ export const createLicenseRouter = ({
           ]
         )
       } catch (error) {
-        if (String(error.message).includes('UNIQUE')) {
+        if (error.code === '23505' || String(error.message).includes('UNIQUE')) {
           return res.status(409).json({
             success: false,
             error: 'That MT5 account is already registered.',
