@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, Eye, EyeOff, LayoutDashboard, LogOut, Menu, Settings2, Sun, Moon } from 'lucide-react'
+import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, Eye, EyeOff, LayoutDashboard, LogOut, Menu, Settings2, ShieldCheck, Sun, Moon } from 'lucide-react'
 import { useEconomicForecasts } from '../hooks/useEconomicForecasts'
 import EaAccess from './EaAccess'
 
 const navItems = [
   { label: 'Overview', active: true, icon: LayoutDashboard },
+  { label: 'EA access', icon: ShieldCheck },
   { label: 'Portfolio', icon: ChartNoAxesCombined },
   { label: 'Transactions', icon: ArrowLeftRight },
   { label: 'Strategy AI', icon: BrainCircuit },
@@ -364,9 +365,9 @@ export default function Dashboard() {
       'group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border border-transparent px-4 py-3 text-left text-sm font-medium',
       pressable,
       isActive
-        ? 'border-white/[0.08] bg-white/[0.06] text-white backdrop-blur-xl before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:bg-cyan-400 before:shadow-[0_0_12px_rgba(34,211,238,0.7)]'
+        ? 'border-[#eac16e]/30 bg-[#1a2b2b]/80 text-[#f8f2e8] backdrop-blur-xl before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:bg-[#eac16e] before:shadow-[0_0_12px_rgba(234,193,110,0.7)]'
         : isDark
-          ? 'text-white/60 hover:border-white/[0.06] hover:bg-white/[0.04] hover:text-white active:bg-sky-500/10 active:text-sky-200'
+          ? 'text-white/60 hover:border-white/[0.06] hover:bg-white/[0.04] hover:text-white active:bg-emerald-500/10 active:text-emerald-200'
           : 'text-slate-600 hover:bg-slate-900/[0.04] hover:text-slate-900 active:bg-sky-500/15 active:text-sky-700',
     ].join(' ')
 const goTo = (labelName) => {
@@ -496,12 +497,12 @@ const goTo = (labelName) => {
     <div
       className={
         isDark
-          ? 'relative min-h-screen overflow-x-hidden bg-transparent text-slate-100'
+          ? 'relative min-h-screen overflow-x-hidden bg-[#090d0f] text-slate-100'
           : 'relative min-h-screen overflow-x-hidden bg-[#eef2f8] text-slate-900'
       }
     >
       {/* Layered market background */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(56,189,248,0.22),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(129,140,248,0.18),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(16,185,129,0.16),transparent_60%)]">
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[radial-gradient(1200px_600px_at_-10%_-10%,rgba(91,209,167,0.13),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(73,179,139,0.10),transparent_60%),radial-gradient(900px_600px_at_50%_120%,rgba(234,193,110,0.09),transparent_60%)]">
         {isDark && !marketVisualFailed && (
           <img
             src="/assets/stock-trading-bg.jpg"
@@ -513,8 +514,8 @@ const goTo = (labelName) => {
             }`}
           />
         )}
-        <div className="absolute inset-0 bg-[linear-gradient(115deg,rgba(2,8,23,0.78)_0%,rgba(2,8,23,0.42)_42%,rgba(4,10,28,0.72)_100%),radial-gradient(circle_at_70%_15%,rgba(16,170,255,0.12),transparent_38%)]" />
-        <div className="absolute inset-0 opacity-[0.22] [background-image:linear-gradient(to_right,rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(115deg,rgba(8,17,14,0.84)_0%,rgba(8,17,14,0.55)_42%,rgba(18,18,13,0.78)_100%),radial-gradient(circle_at_70%_15%,rgba(91,209,167,0.10),transparent_38%)]" />
+        <div className="absolute inset-0 opacity-[0.18] [background-image:linear-gradient(to_right,rgba(234,193,110,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(234,193,110,0.10)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
       </div>
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-[1680px]">
@@ -522,12 +523,12 @@ const goTo = (labelName) => {
         <aside
           className={
             isDark
-              ? 'hidden min-h-screen w-72 shrink-0 border-r border-white/[0.08] bg-[#0a0e1a]/90 p-6 shadow-[12px_0_60px_-35px_rgba(16,185,255,0.22)] backdrop-blur-2xl lg:flex lg:flex-col'
+                    ? 'hidden min-h-screen w-72 shrink-0 border-r border-white/[0.08] bg-[#091316]/90 p-6 shadow-[12px_0_60px_-35px_rgba(91,209,167,0.18)] backdrop-blur-2xl lg:flex lg:flex-col'
               : 'hidden min-h-screen w-72 shrink-0 border-r border-slate-900/5 bg-white/70 p-6 backdrop-blur-2xl lg:flex lg:flex-col'
           }
         >
           <div className="mb-10 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white shadow-[0_12px_30px_-8px_rgba(14,165,233,1)]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#eac16e] to-[#5bd1a7] text-lg font-bold text-[#0d1117] shadow-[0_12px_30px_-8px_rgba(234,193,110,0.7)]">
               N
             </div>
             <div>
@@ -591,13 +592,13 @@ const goTo = (labelName) => {
               onClick={(e) => e.stopPropagation()}
               className={
                 isDark
-                  ? 'h-full w-72 border-r border-white/10 bg-[#030d25]/95 p-6'
+                  ? 'h-full w-72 border-r border-white/10 bg-[#091316]/95 p-6'
                   : 'h-full w-72 border-r border-slate-200 bg-white/95 p-6'
               }
             >
               <div className="mb-8 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#eac16e] to-[#5bd1a7] text-lg font-bold text-[#0d1117]">
                     N
                   </div>
                   <h1 className="text-lg font-bold">NexaFunds</h1>
@@ -659,14 +660,20 @@ const goTo = (labelName) => {
 
         {/* ---------------- Main ---------------- */}
         <main className="min-w-0 flex-1">
-          <header
+          {activeNav === 'EA access' ? (
+            <div className="p-4 sm:p-6 lg:p-8">
+              <EaAccess embedded />
+            </div>
+          ) : (
+            <>
+              <header
             className={
               isDark
-                ? 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-white/[0.08] bg-[#0a0e1a]/75 px-4 py-4 shadow-[0_15px_45px_-35px_rgba(56,189,248,0.45)] backdrop-blur-2xl sm:px-6 sm:py-5'
+                ? 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-white/[0.08] bg-[#091316]/80 px-4 py-4 shadow-[0_15px_45px_-35px_rgba(91,209,167,0.24)] backdrop-blur-2xl sm:px-6 sm:py-5'
                 : 'sticky top-0 z-30 overflow-hidden rounded-b-2xl border-b border-slate-900/5 bg-white/70 px-4 py-4 backdrop-blur-2xl sm:px-6 sm:py-5'
             }
           >
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-blue-500/0 via-cyan-400/60 to-violet-500/0" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#5bd1a7]/0 via-[#eac16e]/60 to-[#5bd1a7]/0" />
             <button
               type="button"
               onClick={() => setMarketVisualVisible((visible) => !visible)}
@@ -697,7 +704,7 @@ const goTo = (labelName) => {
                 </button>
 
                 <div className="relative">
-                  <div className="pointer-events-none absolute -inset-x-3 -inset-y-2 -z-10 bg-sky-400/10 blur-2xl" />
+                  <div className="pointer-events-none absolute -inset-x-3 -inset-y-2 -z-10 bg-[#5bd1a7]/10 blur-2xl" />
                   <p className={`text-xs font-medium tracking-wide sm:text-sm ${softText}`}>Welcome back</p>
                   <h2 className="text-2xl font-bold tracking-tight text-white sm:text-[28px]">Dashboard overview</h2>
                 </div>
@@ -762,11 +769,11 @@ const goTo = (labelName) => {
             <div
               className={
                 isDark
-                  ? 'relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-r from-slate-900/80 via-slate-900/60 to-sky-900/50 p-6 backdrop-blur-xl'
+                  ? 'relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-r from-[#101c19]/90 via-[#14211d]/75 to-[#3d3422]/50 p-6 backdrop-blur-xl'
                   : 'relative overflow-hidden rounded-[28px] border border-slate-900/5 bg-gradient-to-r from-white via-sky-50 to-emerald-50 p-6'
               }
             >
-              <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-sky-500/20 blur-3xl" />
+              <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#eac16e]/15 blur-3xl" />
               <h2 className="relative text-2xl font-bold tracking-tight">
                 {user.first_name}, welcome to NexaFunds 👋
               </h2>
@@ -785,7 +792,7 @@ const goTo = (labelName) => {
               <div
                 className={
                   isDark
-                    ? 'relative overflow-hidden rounded-[30px] border border-white/10 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-sky-950/60 p-6 backdrop-blur-xl'
+                    ? 'relative overflow-hidden rounded-[30px] border border-white/10 bg-gradient-to-br from-[#111c19]/90 via-[#15211d]/75 to-[#3a3020]/50 p-6 backdrop-blur-xl'
                     : 'relative overflow-hidden rounded-[30px] border border-slate-900/5 bg-gradient-to-br from-white via-sky-50 to-emerald-50 p-6'
                 }
               >
@@ -1029,10 +1036,6 @@ const goTo = (labelName) => {
               ))}
             </section>
 
-            <section className="mt-6">
-              <EaAccess embedded />
-            </section>
-
             {/* Access cards */}
             <section className="grid gap-4 md:grid-cols-2">
               {accessCards.map((card) => (
@@ -1235,9 +1238,9 @@ const goTo = (labelName) => {
                     type="button"
                     onClick={() => setShowSettingsModal(true)}
                     className={[
-                      'rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_30px_-14px_rgba(37,99,235,0.9)]',
+                      'rounded-xl bg-gradient-to-r from-[#eac16e] to-[#5bd1a7] px-4 py-2 text-sm font-semibold text-[#101511] shadow-[0_14px_30px_-14px_rgba(234,193,110,0.72)]',
                       pressable,
-                      'hover:from-blue-500 hover:to-cyan-400 active:from-blue-700 active:to-cyan-600',
+                      'hover:brightness-105 active:brightness-95',
                     ].join(' ')}
                   >
                     Update EA
@@ -1303,6 +1306,8 @@ const goTo = (labelName) => {
               </div>
             </section>
           </div>
+            </>
+          )}
         </main>
       </div>
 

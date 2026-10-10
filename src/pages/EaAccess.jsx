@@ -181,9 +181,13 @@ export default function EaAccess({ embedded = false }) {
 
       <div className={embedded ? 'nf-workspace-main nf-workspace-embedded' : 'nf-workspace-main'}>
         <div className="nf-workspace-heading">
-          <span className="nf-eyebrow">YOUR MT5 ACCESS</span>
-          <h1>Connect your trading account.</h1>
-          <p>Register the exact MT5 account you opened under our IB. Demo accounts are approved automatically; live accounts are reviewed before a key is issued.</p>
+          <span className="nf-eyebrow">{embedded ? 'MT5 LICENSE CENTER' : 'YOUR MT5 ACCESS'}</span>
+          <h1>{embedded ? 'EA account access' : 'Connect your trading account.'}</h1>
+          <p>
+            {embedded
+              ? 'Register an MT5 account, review its license, and get your account-bound EA key.'
+              : 'Register the exact MT5 account you opened under our IB. Demo accounts are approved automatically; live accounts are reviewed before a key is issued.'}
+          </p>
         </div>
 
         {error && <p className="nf-form-error nf-page-message" role="alert">{error}</p>}

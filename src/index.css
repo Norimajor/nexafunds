@@ -132,6 +132,17 @@ select {
 .nf-form-success { color: #9be3be; font-size: .85rem; line-height: 1.5; }
 
 .nf-workspace-page { min-height: 100vh; color: #f3f1e9; background: radial-gradient(ellipse at 78% 0, rgba(81, 118, 81, .14), transparent 37%), #0a0e0f; }
+.nf-workspace-section { overflow: hidden; border: 1px solid rgba(234, 193, 110, .2); border-radius: 22px; color: #f3f1e9; background: linear-gradient(145deg, rgba(20, 31, 27, .96), rgba(10, 15, 14, .97)); box-shadow: 0 24px 70px rgba(0, 0, 0, .24); }
+.nf-workspace-main.nf-workspace-embedded { width: 100%; margin: 0; padding: 24px; }
+.nf-workspace-embedded .nf-workspace-heading { max-width: none; margin-bottom: 20px; }
+.nf-workspace-embedded .nf-workspace-heading h1 { margin: 7px 0 5px; font-size: clamp(1.45rem, 2.4vw, 1.9rem); letter-spacing: -.03em; }
+.nf-workspace-embedded .nf-workspace-heading p { max-width: 620px; font-size: .86rem; line-height: 1.55; }
+.nf-workspace-embedded .nf-license-layout { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 14px; }
+.nf-workspace-embedded .nf-panel { padding: 18px; border-radius: 14px; background: linear-gradient(155deg, rgba(23, 31, 28, .76), rgba(11, 17, 15, .8)); box-shadow: none; }
+.nf-workspace-embedded .nf-panel-heading { gap: 10px; margin-bottom: 16px; }
+.nf-workspace-embedded .nf-license-form { gap: 12px; }
+.nf-workspace-embedded .nf-form-field input { min-height: 42px; }
+.nf-workspace-embedded .nf-empty-state { min-height: 132px; }
 .nf-workspace-header { max-width: 1240px; margin: auto; padding: 26px 36px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(184, 194, 175, .11); }
 .nf-brand-button { padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .nf-workspace-user { display: flex; align-items: center; gap: 22px; color: #c7ccc3; font-size: .88rem; }
@@ -208,3 +219,5 @@ select {
 @media (max-width: 900px) { .nf-home-main { grid-template-columns: 1fr; padding-top: 30px; } .nf-hero-copy { max-width: 680px; } .nf-market-visual { min-height: 430px; } .nf-auth-page { grid-template-columns: 38% 62%; } .nf-auth-visual-content { inset: 28px; } .nf-auth-form-side { padding: 36px; } }
 @media (max-width: 900px) { .nf-license-layout { grid-template-columns: 1fr; } .nf-workspace-main { padding-top: 48px; } }
 @media (max-width: 640px) { .nf-header { padding: 20px; } .nf-nav { gap: 12px; } .nf-nav button:first-child { display: none; } .nf-home-main { padding: 42px 20px 58px; gap: 42px; } .nf-hero-copy h1 { font-size: 2.8rem; } .nf-hero-copy > p { font-size: .96rem; } .nf-trust-row { gap: 12px; margin-top: 38px; font-size: .6rem; } .nf-market-visual { min-height: 365px; border-radius: 20px; } .nf-footer { padding: 0 20px 20px; } .nf-footer span { display: none; } .nf-auth-page { display: block; } .nf-auth-visual { min-height: 190px; } .nf-auth-visual-content { inset: 24px 20px; } .nf-auth-visual h2 { max-width: 240px; font-size: 1.7rem; } .nf-auth-visual p { font-size: .78rem; } .nf-auth-form-side { padding: 34px 20px 46px; } .nf-auth-form .nf-brand { margin-bottom: 34px; } .nf-auth-form form, .nf-auth-form > .space-y-5 { padding: 20px; border-radius: 18px; } .nf-workspace-header { padding: 20px; } .nf-workspace-user { gap: 10px; font-size: .77rem; } .nf-workspace-main { width: calc(100% - 32px); padding-top: 39px; } .nf-workspace-heading { margin-bottom: 26px; } .nf-panel { padding: 19px; border-radius: 15px; } .nf-license-card { padding: 13px; } .nf-license-card-heading { flex-direction: column; } .nf-status { align-self: flex-start; } .nf-issued-key { grid-template-columns: 1fr auto; } .nf-workspace-footer { width: calc(100% - 32px); } .nf-admin-queue .nf-panel-heading { flex-wrap: wrap; } .nf-admin-queue .nf-panel-heading > .nf-quiet-button { margin-left: 0; } .nf-admin-actions button { flex: 1; } }
+@media (max-width: 900px) { .nf-workspace-embedded .nf-license-layout { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .nf-workspace-main.nf-workspace-embedded { padding: 16px; } .nf-workspace-embedded .nf-workspace-heading { margin-bottom: 16px; } .nf-workspace-embedded .nf-panel { padding: 15px; } }
