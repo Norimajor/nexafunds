@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, Eye, EyeOff, LayoutDashboard, LogOut, Menu, Settings2, Sun, Moon } from 'lucide-react'
 import { useEconomicForecasts } from '../hooks/useEconomicForecasts'
+import EaAccess from './EaAccess'
 
 const navItems = [
   { label: 'Overview', active: true, icon: LayoutDashboard },
@@ -1005,6 +1006,33 @@ const goTo = (labelName) => {
               )}
             </section>
 
+            {/* Stats */}
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {stats.map((item) => (
+                <div
+                  key={item.label}
+                  className={`${surface} group p-5 transition-all duration-300 hover:-translate-y-1 ${
+                    isDark ? 'hover:border-sky-400/40' : 'hover:border-sky-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className={`text-sm ${softText}`}>{item.label}</p>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tonePill[item.tone]}`}>
+                      {item.change}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-3xl font-bold tabular-nums tracking-tight">{item.value}</h3>
+                  <div className={`mt-4 h-1 w-full overflow-hidden rounded-full ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
+                    <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all duration-500 group-hover:w-full" />
+                  </div>
+                </div>
+              ))}
+            </section>
+
+            <section className="mt-6">
+              <EaAccess embedded />
+            </section>
+
             {/* Access cards */}
             <section className="grid gap-4 md:grid-cols-2">
               {accessCards.map((card) => (
@@ -1031,29 +1059,6 @@ const goTo = (labelName) => {
                   >
                     {card.actionLabel}
                   </a>
-                </div>
-              ))}
-            </section>
-
-            {/* Stats */}
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {stats.map((item) => (
-                <div
-                  key={item.label}
-                  className={`${surface} group p-5 transition-all duration-300 hover:-translate-y-1 ${
-                    isDark ? 'hover:border-sky-400/40' : 'hover:border-sky-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <p className={`text-sm ${softText}`}>{item.label}</p>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tonePill[item.tone]}`}>
-                      {item.change}
-                    </span>
-                  </div>
-                  <h3 className="mt-4 text-3xl font-bold tabular-nums tracking-tight">{item.value}</h3>
-                  <div className={`mt-4 h-1 w-full overflow-hidden rounded-full ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
-                    <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all duration-500 group-hover:w-full" />
-                  </div>
                 </div>
               ))}
             </section>

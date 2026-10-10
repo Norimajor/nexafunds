@@ -109,7 +109,7 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
         throw new Error(data.error || 'Failed to create account')
       }
 
-      navigate('/ea-access', { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (error) {
       console.error('Registration error:', error)
       alert(error.message || 'Failed to create account. Please try again.')

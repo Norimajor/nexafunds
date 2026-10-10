@@ -37,7 +37,7 @@ export default function Login() {
 
       if (response.ok && data.success) {
         localStorage.setItem('nexafunds_user', JSON.stringify(data.user))
-        navigate('/ea-access')
+        navigate('/dashboard')
       } else if (data.error) {
         throw new Error(data.error)
       } else {
