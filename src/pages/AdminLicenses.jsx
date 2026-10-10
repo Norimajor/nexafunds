@@ -2,10 +2,15 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
+const ADMIN_KEY_STORAGE = 'nexafunds.admin-api-key'
+
+const readSavedAdminKey = () => window.localStorage.getItem(ADMIN_KEY_STORAGE) || ''
 
 export default function AdminLicenses() {
   const navigate = useNavigate()
-  const [adminKey, setAdminKey] = useState('')
+  const [adminKey, setAdminKey] = useState(readSavedAdminKey)
+  const [rememberAdminKey, setRememberAdminKey] = useState(true)
+  const [hasSavedAdminKey, setHasSavedAdminKey] = useState(() => Boolean(readSavedAdminKey()))
   const [licenses, setLicenses] = useState([])
   const [eaFileName, setEaFileName] = useState('')
   const [eaAvailable, setEaAvailable] = useState(false)
@@ -41,11 +46,34 @@ export default function AdminLicenses() {
       setSigningConfigured(Boolean(eaData.license_configured))
       setEaFileName(eaData.file_name || '')
       setAuthenticated(true)
+      try {
+        if (rememberAdminKey) {
+          window.localStorage.setItem(ADMIN_KEY_STORAGE, key)
+          setHasSavedAdminKey(true)
+        } else {
+          window.localStorage.removeItem(ADMIN_KEY_STORAGE)
+          setHasSavedAdminKey(false)
+        }
+      } catch {
+        setError('Access is open, but this browser could not save the admin key.')
+      }
     } catch (loadError) {
       setAuthenticated(false)
       setError(loadError.message || 'Unable to load account requests.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const forgetAdminKey = () => {
+    try {
+      window.localStorage.removeItem(ADMIN_KEY_STORAGE)
+      setAdminKey('')
+      setRememberAdminKey(false)
+      setHasSavedAdminKey(false)
+      setError('')
+    } catch {
+      setError('This browser could not remove the saved admin key.')
     }
   }
 
@@ -99,7 +127,7 @@ export default function AdminLicenses() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Unable to update the account request.')
       }
-      await loadLicenses()
+      await loadLicenses(adminKey)
     } catch (decisionError) {
       setError(decisionError.message || 'Unable to update the account request.')
     } finally {
@@ -124,12 +152,34 @@ export default function AdminLicenses() {
         </div>
         {error && <p className="nf-form-error nf-page-message" role="alert">{error}</p>}
         {!authenticated ? (
-          <form className="nf-panel nf-admin-login" onSubmit={(event) => { event.preventDefault(); loadLicenses() }}>
+          <form className="nf-panel nf-admin-login" onSubmit={(event) => { event.preventDefault(); loadLicenses(adminKey) }}>
             <label className="nf-form-field">
               <span>Admin API key</span>
               <input type="password" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} autoComplete="off" required />
             </label>
-            <p className="nf-download-note">The key is sent only to the NexaFunds API and is not saved in this browser.</p>
+            <label className="nf-admin-remember">
+              <input
+                type="checkbox"
+                checked={rememberAdminKey}
+                onChange={(event) => {
+                  const shouldRemember = event.target.checked
+                  setRememberAdminKey(shouldRemember)
+                  if (!shouldRemember) {
+                    try {
+                      window.localStorage.removeItem(ADMIN_KEY_STORAGE)
+                      setHasSavedAdminKey(false)
+                    } catch {
+                      setError('This browser could not remove the saved admin key.')
+                    }
+                  }
+                }}
+              />
+              Remember this key on this device
+            </label>
+            <p className="nf-download-note">The key is sent only to the NexaFunds API. Remembering it stores it in this browser until you forget it.</p>
+            {hasSavedAdminKey && (
+              <button className="nf-quiet-button" type="button" onClick={forgetAdminKey}>Forget saved key</button>
+            )}
             <button className="nf-primary nf-submit-button" type="submit" disabled={loading}>{loading ? 'Checking access…' : 'Open verification queue'}</button>
           </form>
         ) : (
@@ -167,7 +217,7 @@ export default function AdminLicenses() {
             <div className="nf-panel-heading">
               <span className="nf-step-number">02</span>
               <div><h2>MT5 account requests</h2><p>Verify that each submitted account is registered under the NexaFunds IB.</p></div>
-              <button className="nf-quiet-button" onClick={() => { setAuthenticated(false); setAdminKey(''); setLicenses([]) }}>Lock queue</button>
+              <button className="nf-quiet-button" onClick={() => { setAuthenticated(false); if (!rememberAdminKey) setAdminKey(''); setLicenses([]) }}>Lock queue</button>
             </div>
             {licenses.length === 0 ? <p className="nf-empty-state">No account requests yet.</p> : (
               <div className="nf-license-list">

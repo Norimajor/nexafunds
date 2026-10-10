@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
+import { getDownloadFilename } from '../utils/eaDownload'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
 const PEPPERSTONE_IB_URL = 'https://trk.pepperstonepartners.com/aff_c?offer_id=367&aff_id=51096&source=52793&referral_source=52793&referral_provider=tune_link'
@@ -156,7 +157,7 @@ export default function EaAccess({ embedded = false }) {
       const downloadUrl = URL.createObjectURL(await response.blob())
       const link = document.createElement('a')
       link.href = downloadUrl
-      link.download = 'NexaFunds-EA.ex5'
+      link.download = getDownloadFilename(response.headers.get('Content-Disposition'))
       document.body.appendChild(link)
       link.click()
       link.remove()

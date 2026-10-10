@@ -64,6 +64,16 @@ const hasDownload = (fs, path) => {
   )
 }
 
+const readEaOriginalName = async (fs, path, filePath) => {
+  try {
+    const originalName = (await fs.promises.readFile(`${filePath}.original-name`, 'utf8')).trim()
+    return originalName || path.basename(filePath)
+  } catch (error) {
+    if (error.code === 'ENOENT') return path.basename(filePath)
+    throw error
+  }
+}
+
 export const createLicenseRouter = ({
   db,
   requireAuth,
@@ -332,7 +342,9 @@ export const createLicenseRouter = ({
         })
       }
 
-      res.download(resolvedFile, 'NexaFunds-EA.ex5', (error) => {
+      const originalName = await readEaOriginalName(fs, path, resolvedFile)
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition')
+      res.download(resolvedFile, originalName, (error) => {
         if (error) {
           console.error('EA download failed:', error)
           if (!res.headersSent) {
@@ -364,16 +376,21 @@ export const createLicenseRouter = ({
   router.get(
     '/admin/ea',
     requireAdmin,
-    (_req, res) => {
+    asyncRoute(async (_req, res) => {
+      const configuredFile = process.env.EA_DOWNLOAD_PATH
+      const resolvedFile = configuredFile ? path.resolve(configuredFile) : null
       res.json({
         success: true,
         license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
         download_available: hasDownload(fs, path),
-        file_name: process.env.EA_DOWNLOAD_PATH
-          ? path.basename(process.env.EA_DOWNLOAD_PATH)
-          : null,
+        file_name:
+          resolvedFile && fs.existsSync(resolvedFile)
+            ? await readEaOriginalName(fs, path, resolvedFile)
+            : configuredFile
+              ? path.basename(configuredFile)
+              : null,
       })
-    }
+    })
   )
 
   router.post(
@@ -390,7 +407,33 @@ export const createLicenseRouter = ({
 
       const targetPath = path.resolve(process.env.EA_DOWNLOAD_PATH)
       const backupPath = `${targetPath}.${randomUUID()}.backup`
+      const metadataPath = `${targetPath}.original-name`
+      const metadataBackupPath = `${metadataPath}.${randomUUID()}.backup`
+      const metadataUploadPath = `${metadataPath}.${randomUUID()}.upload`
+      const originalName = path
+        .basename(String(req.file.originalname || '').replace(/[\\/]/g, '/'))
+        .split('')
+        .filter((character) => {
+          const codePoint = character.codePointAt(0)
+          return codePoint !== undefined && codePoint >= 32 && codePoint !== 127
+        })
+        .join('')
+        .trim()
+      if (!originalName) {
+        await fs.promises.unlink(req.file.path).catch((cleanupError) => {
+          if (cleanupError.code !== 'ENOENT') {
+            console.error('Unable to remove invalid EA upload:', cleanupError)
+          }
+        })
+        return res.status(400).json({
+          success: false,
+          error: 'The uploaded EA must have a valid filename.',
+        })
+      }
+
       let backupCreated = false
+      let metadataBackupCreated = false
+      let uploadInstalled = false
       try {
         try {
           await fs.promises.rename(targetPath, backupPath)
@@ -398,11 +441,37 @@ export const createLicenseRouter = ({
         } catch (error) {
           if (error.code !== 'ENOENT') throw error
         }
+        try {
+          await fs.promises.rename(metadataPath, metadataBackupPath)
+          metadataBackupCreated = true
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error
+        }
         await fs.promises.rename(req.file.path, targetPath)
+        uploadInstalled = true
+        await fs.promises.writeFile(metadataUploadPath, originalName, { flag: 'wx' })
+        await fs.promises.rename(metadataUploadPath, metadataPath)
       } catch (error) {
+        await fs.promises.unlink(metadataUploadPath).catch((cleanupError) => {
+          if (cleanupError.code !== 'ENOENT') {
+            console.error('Unable to remove temporary EA filename metadata:', cleanupError)
+          }
+        })
+        if (uploadInstalled) {
+          await fs.promises.unlink(targetPath).catch((cleanupError) => {
+            if (cleanupError.code !== 'ENOENT') {
+              console.error('Unable to remove incomplete EA upload:', cleanupError)
+            }
+          })
+        }
         if (backupCreated) {
           await fs.promises.rename(backupPath, targetPath).catch((restoreError) => {
             console.error('Unable to restore previous EA upload:', restoreError)
+          })
+        }
+        if (metadataBackupCreated) {
+          await fs.promises.rename(metadataBackupPath, metadataPath).catch((restoreError) => {
+            console.error('Unable to restore previous EA filename metadata:', restoreError)
           })
         }
         await fs.promises.unlink(req.file.path).catch((cleanupError) => {
@@ -417,11 +486,16 @@ export const createLicenseRouter = ({
           console.error('Unable to remove previous EA upload backup:', cleanupError)
         })
       }
+      if (metadataBackupCreated) {
+        await fs.promises.unlink(metadataBackupPath).catch((cleanupError) => {
+          console.error('Unable to remove previous EA filename metadata backup:', cleanupError)
+        })
+      }
 
       res.json({
         success: true,
         download_available: true,
-        file_name: path.basename(targetPath),
+        file_name: originalName,
       })
     })
   )

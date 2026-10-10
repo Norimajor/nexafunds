@@ -280,6 +280,8 @@ select {
 .nf-admin-main { max-width: 900px; }
 .nf-admin-login { max-width: 480px; }
 .nf-admin-login .nf-download-note { margin: 13px 0 18px; }
+.nf-admin-remember { display: flex; align-items: center; gap: 9px; color: #e3e9e1; font-size: .82rem; }
+.nf-admin-remember input { accent-color: #b9ee7a; }
 .nf-admin-queue .nf-panel-heading { align-items: center; }
 .nf-admin-queue .nf-panel-heading > .nf-quiet-button { margin-left: auto; }
 .nf-admin-server-field { margin-top: 12px; }

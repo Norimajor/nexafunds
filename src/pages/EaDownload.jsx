@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PortalPageLayout } from '../components/PortalSidebar'
+import { getDownloadFilename } from '../utils/eaDownload'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
 
@@ -64,7 +65,7 @@ export default function EaDownload() {
       const url = URL.createObjectURL(await response.blob())
       const link = document.createElement('a')
       link.href = url
-      link.download = 'NexaFunds-EA.ex5'
+      link.download = getDownloadFilename(response.headers.get('Content-Disposition'))
       document.body.appendChild(link)
       link.click()
       link.remove()
