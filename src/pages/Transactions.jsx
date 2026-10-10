@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { PortalPageLayout } from '../components/PortalSidebar'
 
 const baseClass = 'rounded-2xl border border-[#eac16e]/15 bg-[#111a17]/90 p-4 text-[#f3f1e9] shadow-[0_20px_40px_rgba(0,0,0,0.25)]'
 
@@ -60,7 +61,8 @@ export default function Transactions() {
   }
 
   return (
-    <div className="min-h-screen bg-[#090d0f] p-4 text-[#f3f1e9] sm:p-6">
+    <PortalPageLayout activeLabel="Transactions">
+      <div className="min-h-screen p-4 text-[#f3f1e9] sm:p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex items-center justify-between gap-3">
           <div>
@@ -179,6 +181,7 @@ export default function Transactions() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </PortalPageLayout>
   )
 }

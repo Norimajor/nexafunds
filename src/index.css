@@ -155,6 +155,8 @@ select {
 [class~="bg-[#020d20]"] [class*="border-blue-"], [class~="bg-[#020d20]"] [class*="border-cyan-"] { border-color: rgba(234, 193, 110, .3) !important; }
 [class~="bg-[#020d20]"] [class*="bg-blue-"], [class~="bg-[#020d20]"] [class*="bg-cyan-"] { background-color: rgba(91, 209, 167, .12) !important; }
 [class~="bg-[#020d20]"] section > div[style] { background: radial-gradient(ellipse at 84% 18%, rgba(91, 209, 167, .2), transparent 42%), radial-gradient(ellipse at 85% 88%, rgba(234, 193, 110, .14), transparent 43%) !important; }
+[class~="bg-[#020d20]"] nav button { min-height: 52px; border: 1px solid rgba(234, 193, 110, .12); border-radius: 16px; background: rgba(16, 43, 37, .8); color: #d1d5cc; }
+[class~="bg-[#020d20]"] nav button[class*="from-blue-"] { border-color: transparent; background-image: linear-gradient(105deg, #eac16e, #5bd1a7) !important; color: #fff; box-shadow: 0 8px 25px rgba(91, 209, 167, .2); }
 .nf-workspace-header { max-width: 1240px; margin: auto; padding: 26px 36px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(184, 194, 175, .11); }
 .nf-brand-button { padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .nf-workspace-user { display: flex; align-items: center; gap: 22px; color: #c7ccc3; font-size: .88rem; }

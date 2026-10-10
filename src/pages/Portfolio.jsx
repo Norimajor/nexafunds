@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { PortalPageLayout } from '../components/PortalSidebar'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
 
@@ -69,7 +70,8 @@ export default function Portfolio() {
   )
 
   return (
-    <div className="min-h-screen space-y-6 bg-[#090d0f] p-4 text-[#f3f1e9] sm:p-6">
+    <PortalPageLayout activeLabel="Portfolio">
+      <div className="space-y-6 p-4 text-[#f3f1e9] sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -254,6 +256,7 @@ export default function Portfolio() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </PortalPageLayout>
   )
 }

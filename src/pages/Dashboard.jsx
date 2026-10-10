@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, Eye, EyeOff, LayoutDashboard, LogOut, Menu, Settings2, ShieldCheck, Sun, Moon } from 'lucide-react'
 import { useEconomicForecasts } from '../hooks/useEconomicForecasts'
+import { PortalNavigation } from '../components/PortalSidebar'
 import EaAccess from './EaAccess'
 
 const navItems = [
@@ -60,7 +61,9 @@ export default function Dashboard() {
   const [marketVisualFailed, setMarketVisualFailed] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showSettingsPanel, setShowSettingsPanel] = useState(false)
-  const [activeNav, setActiveNav] = useState('Overview')
+  const [activeNav, setActiveNav] = useState(
+    () => new URLSearchParams(window.location.search).get('section') === 'ea-access' ? 'EA access' : 'Overview',
+  )
   const [activeRange, setActiveRange] = useState('3M')
   const [eaStatus, setEaStatus] = useState({ status: 'OFFLINE', live: false, ea: null })
   const [journal, setJournal] = useState([])
@@ -527,32 +530,7 @@ const goTo = (labelName) => {
               : 'hidden min-h-screen w-72 shrink-0 border-r border-slate-900/5 bg-white/70 p-6 backdrop-blur-2xl lg:flex lg:flex-col'
           }
         >
-          <div className="mb-10 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#eac16e] to-[#5bd1a7] text-lg font-bold text-[#0d1117] shadow-[0_12px_30px_-8px_rgba(234,193,110,0.7)]">
-              N
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">NexaFunds</h1>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300/70">Investor Portal</p>
-            </div>
-          </div>
-
-          <nav className="space-y-1.5">
-            {navItems.map((item) => {
-              const isActive = activeNav === item.label
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => goTo(item.label)}
-                  className={navButton(item, isActive)}
-                >
-                  <item.icon size={20} strokeWidth={1.8} />
-                  <span>{item.label}</span>
-                </button>
-              )
-            })}
-          </nav>
+          <PortalNavigation activeLabel={activeNav} onNavigate={goTo} />
 
           <div className="mt-auto space-y-4">
             <div className={`p-4 ${surface}`}>
@@ -596,13 +574,7 @@ const goTo = (labelName) => {
                   : 'h-full w-72 border-r border-slate-200 bg-white/95 p-6'
               }
             >
-              <div className="mb-8 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#eac16e] to-[#5bd1a7] text-lg font-bold text-[#0d1117]">
-                    N
-                  </div>
-                  <h1 className="text-lg font-bold">NexaFunds</h1>
-                </div>
+              <div className="mb-6 flex justify-end">
                 <button
                   type="button"
                   onClick={() => setMobileSidebarOpen(false)}
@@ -612,25 +584,13 @@ const goTo = (labelName) => {
                 </button>
               </div>
 
-              <nav className="space-y-1.5">
-                {navItems.map((item) => {
-                  const isActive = activeNav === item.label
-                  return (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => {
-                        setMobileSidebarOpen(false)
-                        goTo(item.label)
-                      }}
-                      className={navButton(item, isActive)}
-                    >
-                      <item.icon size={20} strokeWidth={1.8} />
-                      <span>{item.label}</span>
-                    </button>
-                  )
-                })}
+              <PortalNavigation
+                activeLabel={activeNav}
+                onNavigate={goTo}
+                onClose={() => setMobileSidebarOpen(false)}
+              />
 
+              <nav className="mt-8 space-y-1.5">
                 <button
                   type="button"
                   onClick={() => {
