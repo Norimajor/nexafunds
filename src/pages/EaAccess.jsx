@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { QRCodeSVG } from 'qrcode.react'
 
 const API_BASE = 'https://nexafunds-app.onrender.com'
 const PEPPERSTONE_IB_URL = 'https://trk.pepperstonepartners.com/aff_c?offer_id=367&aff_id=51096&source=52793&referral_source=52793&referral_provider=tune_link'
@@ -20,7 +21,7 @@ export default function EaAccess({ embedded = false }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [brokerName, setBrokerName] = useState('Pepperstone')
+  const [brokerName, setBrokerName] = useState('')
   const [accountLogin, setAccountLogin] = useState('')
   const [accountType, setAccountType] = useState('demo')
   const [ibConfirmation, setIbConfirmation] = useState(false)
@@ -104,7 +105,7 @@ export default function EaAccess({ embedded = false }) {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          broker_name: brokerName.trim(),
+          broker_name: accountType === 'real' ? 'Pepperstone' : brokerName.trim(),
           account_login: accountLogin.trim(),
           account_type: accountType,
           ib_confirmation: ibConfirmation,
@@ -202,9 +203,21 @@ export default function EaAccess({ embedded = false }) {
               Use the NexaFunds Pepperstone link when creating your trading account so it can be associated with our Introducing Broker (IB). Once your MT5 account is ready, register the account number below. We’ll verify the exact MT5 server during review before issuing an account-bound EA key.
             </p>
           </div>
-          <a href={PEPPERSTONE_IB_URL} target="_blank" rel="noopener noreferrer">
-            Open a Pepperstone account <span aria-hidden="true">↗</span>
-          </a>
+          <div className="nf-ib-referral-actions">
+            <div className="nf-ib-qr">
+              <QRCodeSVG
+                value={PEPPERSTONE_IB_URL}
+                size={112}
+                level="H"
+                includeMargin
+                title="Scan to open a Pepperstone account through the NexaFunds partner link"
+              />
+              <span>Scan to open the partner link</span>
+            </div>
+            <a href={PEPPERSTONE_IB_URL} target="_blank" rel="noopener noreferrer">
+              Open a Pepperstone account <span aria-hidden="true">↗</span>
+            </a>
+          </div>
         </aside>
 
         <div className="nf-workspace-heading">
@@ -229,30 +242,40 @@ export default function EaAccess({ embedded = false }) {
           <section className="nf-panel nf-request-panel">
             <div className="nf-panel-heading">
               <span className="nf-step-number">01</span>
-              <div><h2>Register an MT5 account</h2><p>Enter the account number for your Pepperstone MT5 account. We’ll confirm its server during review.</p></div>
+              <div><h2>Register an MT5 account</h2><p>Select your account type first. We’ll confirm its exact MT5 server during review.</p></div>
             </div>
             <form className="nf-license-form" onSubmit={handleSubmit}>
+              <fieldset className="nf-account-type">
+                <legend>Account type</legend>
+                <label className={`nf-choice nf-choice-demo${accountType === 'demo' ? ' nf-choice-demo-active' : ''}`}>
+                  <input type="radio" name="account-type" value="demo" checked={accountType === 'demo'} onChange={() => setAccountType('demo')} />
+                  <span><strong>Demo</strong><small>Enter your broker name</small></span>
+                </label>
+                <label className={`nf-choice nf-choice-live${accountType === 'real' ? ' nf-choice-live-active' : ''}`}>
+                  <input type="radio" name="account-type" value="real" checked={accountType === 'real'} onChange={() => setAccountType('real')} />
+                  <span><strong>Live</strong><small>Pepperstone · NexaFunds IB</small></span>
+                </label>
+              </fieldset>
               <label className="nf-form-field">
                 <span>Broker</span>
-                <select className="nf-broker-select" value={brokerName} onChange={(event) => setBrokerName(event.target.value)} required>
-                  <option value="Pepperstone">Pepperstone · NexaFunds IB</option>
-                </select>
+                {accountType === 'real' ? (
+                  <select className="nf-broker-select" defaultValue="Pepperstone" aria-label="Broker" disabled>
+                    <option value="Pepperstone">Pepperstone · NexaFunds IB</option>
+                  </select>
+                ) : (
+                  <input
+                    value={brokerName}
+                    onChange={(event) => setBrokerName(event.target.value)}
+                    placeholder="Enter your demo account broker"
+                    maxLength={80}
+                    required
+                  />
+                )}
               </label>
               <label className="nf-form-field">
                 <span>MT5 account number</span>
                 <input value={accountLogin} onChange={(event) => setAccountLogin(event.target.value)} placeholder="Account login" inputMode="numeric" pattern="[0-9]{3,20}" maxLength={20} required />
               </label>
-              <fieldset className="nf-account-type">
-                <legend>Account type</legend>
-                <label className={`nf-choice nf-choice-demo${accountType === 'demo' ? ' nf-choice-demo-active' : ''}`}>
-                  <input type="radio" name="account-type" value="demo" checked={accountType === 'demo'} onChange={() => setAccountType('demo')} />
-                  <span><strong>Demo</strong><small>Verification required</small></span>
-                </label>
-                <label className={`nf-choice nf-choice-live${accountType === 'real' ? ' nf-choice-live-active' : ''}`}>
-                  <input type="radio" name="account-type" value="real" checked={accountType === 'real'} onChange={() => setAccountType('real')} />
-                  <span><strong>Live</strong><small>Verification required</small></span>
-                </label>
-              </fieldset>
               <label className="nf-ib-confirmation">
                 <input type="checkbox" checked={ibConfirmation} onChange={(event) => setIbConfirmation(event.target.checked)} required />
                 <span>I confirm this account was opened under the NexaFunds introducing broker and the details above are accurate.</span>
