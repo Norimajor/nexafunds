@@ -280,7 +280,7 @@ export default function AdminLicenses() {
             </div>
             {!signingConfigured && (
               <p className="nf-form-error nf-page-message mt-5" role="alert">
-                License issuance is disabled until LICENSE_SIGNING_SECRET is configured in the API hosting environment and the server is restarted.
+                License issuance is disabled until the API has a LICENSE_SIGNING_SECRET of at least 32 bytes and is restarted.
               </p>
             )}
           </section>

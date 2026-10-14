@@ -206,7 +206,7 @@ export default function EaAccess({ embedded = false }) {
         {notice && <p className="nf-form-success nf-page-message" role="status">{notice}</p>}
         {!loading && !licenseConfigured && (
           <p className="nf-form-error nf-page-message" role="status">
-            License signing is not configured on the NexaFunds API yet. You can submit an account request, but NexaFunds must configure its signing secret before an administrator can issue keys.
+            License signing is not configured on the NexaFunds API yet. You can submit an account request, but NexaFunds must configure a signing secret of at least 32 bytes before an administrator can issue keys.
           </p>
         )}
 

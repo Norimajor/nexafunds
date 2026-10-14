@@ -1,10 +1,14 @@
 import { Router } from 'express'
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import multer from 'multer'
+import {
+  createLicenseKey,
+  isSigningSecretConfigured,
+  verifyLicenseKey,
+} from '../license-encoding.js'
 
 const normalizeAccountType = (value) => String(value || '').trim().toLowerCase()
 
-const createLicenseKey = () => `NEXA-AI-${randomBytes(16).toString('hex').toUpperCase()}`
 const isValidProductId = (productId) => /^[a-z0-9][a-z0-9-]{1,47}$/.test(productId)
 const EA_PRODUCTS = [
   { product_id: 'nexa-ai-pro', name: 'NexaFunds AI Pro' },
@@ -14,14 +18,44 @@ const EA_PRODUCTS = [
 const getEaProduct = (productId) =>
   EA_PRODUCTS.find((product) => product.product_id === productId)
 
-const ensureProductLicenseKeys = async (db, licenseId, { all, run }) => {
+const ensureProductLicenseKeys = async (db, licenseId, { all, get, run }) => {
+  const license = await get(
+    db,
+    'SELECT account_login, account_type, broker_server FROM ea_licenses WHERE id = ?',
+    [licenseId]
+  )
+  if (!license) throw new Error(`Cannot issue keys for missing license ${licenseId}.`)
+
   const products = await all(db, 'SELECT product_id FROM ea_products')
   for (const product of products) {
+    const existing = await get(
+      db,
+      'SELECT license_key FROM ea_product_licenses WHERE license_id = ? AND product_id = ?',
+      [licenseId, product.product_id]
+    )
+    const expected = {
+      accountLogin: license.account_login,
+      accountType: license.account_type,
+      brokerServer: license.broker_server,
+      productId: product.product_id,
+    }
+    if (
+      existing?.license_key &&
+      verifyLicenseKey(existing.license_key, expected)
+    ) {
+      continue
+    }
+
     await run(
       db,
       `INSERT INTO ea_product_licenses (license_id, product_id, license_key)
-       VALUES (?, ?, ?) ON CONFLICT (license_id, product_id) DO NOTHING`,
-      [licenseId, product.product_id, createLicenseKey()]
+       VALUES (?, ?, ?) ON CONFLICT (license_id, product_id) DO UPDATE
+       SET license_key = excluded.license_key`,
+      [
+        licenseId,
+        product.product_id,
+        createLicenseKey(license, product.product_id),
+      ]
     )
   }
 }
@@ -96,11 +130,11 @@ export const createLicenseRouter = ({
   }
 
   const requireLicenseConfig = (req, res, next) => {
-    if (!process.env.LICENSE_SIGNING_SECRET) {
+    if (!isSigningSecretConfigured()) {
       return res.status(503).json({
         success: false,
         error:
-          'EA licensing is unavailable because the API server is missing its license signing secret. Please contact NexaFunds support.',
+          'EA licensing is unavailable because the API server needs a LICENSE_SIGNING_SECRET of at least 32 bytes. Please contact NexaFunds support.',
       })
     }
     next()
@@ -120,10 +154,10 @@ export const createLicenseRouter = ({
         [req.session.user.id]
       )
       const activeLicenses = licenses.filter((license) => license.status === 'active')
-      if (process.env.LICENSE_SIGNING_SECRET) {
+      if (isSigningSecretConfigured()) {
         await Promise.all(
           activeLicenses.map((license) =>
-            ensureProductLicenseKeys(db, license.id, { all, run })
+            ensureProductLicenseKeys(db, license.id, { all, get, run })
           )
         )
       }
@@ -143,7 +177,7 @@ export const createLicenseRouter = ({
 
       res.json({
         success: true,
-        license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
+        license_configured: isSigningSecretConfigured(),
         download_available: availableProducts.some((product) =>
           isAvailableProduct(fs, path, process.env.EA_DOWNLOAD_PATH, product)
         ),
@@ -159,7 +193,7 @@ export const createLicenseRouter = ({
             product
           ),
         })),
-        product_licenses: process.env.LICENSE_SIGNING_SECRET
+        product_licenses: isSigningSecretConfigured()
           ? products.filter((product) => product.license_id !== null)
           : [],
       })
@@ -173,7 +207,8 @@ export const createLicenseRouter = ({
       const body = req.body || {}
       const brokerName = String(body.broker_name || '').trim()
       const brokerServer = String(body.broker_server || '').trim()
-      const accountLogin = String(body.account_login || '').trim()
+      const accountLogin =
+        typeof body.account_login === 'string' ? body.account_login.trim() : ''
       const accountType = normalizeAccountType(body.account_type)
 
       if (
@@ -222,7 +257,7 @@ export const createLicenseRouter = ({
       ])
       res.status(201).json({
         success: true,
-        license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
+        license_configured: isSigningSecretConfigured(),
         license: {
           ...license,
           broker_server: license.broker_server.startsWith('pending-')
@@ -239,7 +274,8 @@ export const createLicenseRouter = ({
     requireLicenseConfig,
     asyncRoute(async (req, res) => {
       const body = req.body || {}
-      const accountLogin = String(body.account_login || '').trim()
+      const accountLogin =
+        typeof body.account_login === 'string' ? body.account_login.trim() : ''
       const brokerServer = String(body.broker_server || '').trim()
       const accountType = normalizeAccountType(body.account_type)
 
@@ -258,31 +294,29 @@ export const createLicenseRouter = ({
       if (!isValidProductId(productId)) {
         return res.status(401).json({ success: false, valid: false })
       }
-      const isNewKey = /^NEXA-AI-[A-F0-9]{32}$/.test(licenseKey)
-      const license = isNewKey
-        ? await get(
-          db,
-          `SELECT l.*, k.product_id, k.license_key FROM ea_product_licenses k
-           JOIN ea_licenses l ON l.id = k.license_id
-           WHERE k.product_id = ? AND k.license_key = ?`,
-          [productId, licenseKey]
-        )
-        : null
-      const storedKey = license?.license_key
-      const suppliedBuffer = Buffer.from(licenseKey)
-      const storedBuffer = Buffer.from(storedKey || '')
-      const keyMatches =
-        Boolean(license) &&
-        suppliedBuffer.length === storedBuffer.length &&
-        timingSafeEqual(suppliedBuffer, storedBuffer)
+      const signedClaims = verifyLicenseKey(licenseKey, {
+        accountLogin,
+        accountType,
+        brokerServer,
+        productId,
+      })
+      if (!signedClaims) {
+        return res.status(401).json({ success: false, valid: false })
+      }
+      const license = await get(
+        db,
+        `SELECT l.*, k.product_id, k.license_key FROM ea_product_licenses k
+         JOIN ea_licenses l ON l.id = k.license_id
+         WHERE k.product_id = ? AND k.license_key = ?`,
+        [productId, licenseKey]
+      )
 
       const valid =
         license?.status === 'active' &&
-        license.account_login === accountLogin &&
+        license.account_login === signedClaims.account_login &&
         license.broker_server.toLowerCase() === brokerServer.toLowerCase() &&
         license.account_type === accountType &&
-        license.product_id === productId &&
-        keyMatches
+        license.product_id === productId
 
       if (!valid) {
         return res.status(401).json({ success: false, valid: false })
@@ -364,6 +398,15 @@ export const createLicenseRouter = ({
          FROM ea_licenses l JOIN users u ON u.id = l.user_id
          ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.id DESC`
       )
+      if (isSigningSecretConfigured()) {
+        await Promise.all(
+          licenses
+            .filter((license) => license.status === 'active')
+            .map((license) =>
+              ensureProductLicenseKeys(db, license.id, { all, get, run })
+            )
+        )
+      }
       const products = await all(
         db,
         'SELECT product_id, name, file_name, created_at FROM ea_products ORDER BY created_at, name'
@@ -394,7 +437,7 @@ export const createLicenseRouter = ({
       )
       res.json({
         success: true,
-        license_configured: Boolean(process.env.LICENSE_SIGNING_SECRET),
+        license_configured: isSigningSecretConfigured(),
         products: EA_PRODUCTS.map((slot) => {
           const product = products.find((entry) => entry.product_id === slot.product_id)
           return {
@@ -465,10 +508,12 @@ export const createLicenseRouter = ({
              storage_name = excluded.storage_name`,
           [productId, product.name, originalName, storageName]
         )
-        if (process.env.LICENSE_SIGNING_SECRET) {
+        if (isSigningSecretConfigured()) {
           const activeLicenses = await all(db, "SELECT id FROM ea_licenses WHERE status = 'active'")
           await Promise.all(
-            activeLicenses.map((license) => ensureProductLicenseKeys(db, license.id, { all, run }))
+            activeLicenses.map((license) =>
+              ensureProductLicenseKeys(db, license.id, { all, get, run })
+            )
           )
         }
       } catch (error) {
@@ -618,7 +663,7 @@ export const createLicenseRouter = ({
       }
 
       if (status === 'active') {
-        await ensureProductLicenseKeys(db, req.params.licenseId, { all, run })
+        await ensureProductLicenseKeys(db, req.params.licenseId, { all, get, run })
       }
       res.json({ success: true, status })
     })
