@@ -1,4 +1,4 @@
-import { ArrowLeftRight, BrainCircuit, ChartPie, House, Menu, ShieldCheck } from 'lucide-react'
+import { ArrowLeftRight, BrainCircuit, ChartPie, House, Menu, Radio, ShieldCheck } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 
@@ -7,6 +7,7 @@ const navItems = [
   { label: 'EA access', path: '/dashboard?section=ea-access', icon: ShieldCheck },
   { label: 'Portfolio', path: '/portfolio', icon: ChartPie },
   { label: 'Transactions', path: '/transactions', icon: ArrowLeftRight },
+  { label: 'Streaming', path: '/streaming', icon: Radio },
   { label: 'Strategy AI', path: '/strategy-ai', icon: BrainCircuit },
 ]
 

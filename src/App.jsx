@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 
 import Home from './pages/Home'
@@ -11,6 +12,8 @@ import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
 import Transactions from './pages/Transactions'
 import StrategyAI from './pages/StrategyAI'
+
+const Streaming = lazy(() => import('./pages/Streaming'))
 
 function LegacyEaDownloadRedirect() {
   const { licenseId } = useParams()
@@ -32,6 +35,22 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route
+          path="/streaming"
+          element={(
+            <Suspense fallback={<div className="min-h-screen bg-[#090d0f]" />}>
+              <Streaming />
+            </Suspense>
+          )}
+        />
+        <Route
+          path="/streaming/:username"
+          element={(
+            <Suspense fallback={<div className="min-h-screen bg-[#090d0f]" />}>
+              <Streaming />
+            </Suspense>
+          )}
+        />
         <Route path="/strategy-ai" element={<StrategyAI />} />
       </Routes>
     </BrowserRouter>

@@ -166,6 +166,8 @@ export const verifyLicenseKey = (
   secret = process.env.LICENSE_SIGNING_SECRET
 ) => {
   if (typeof licenseKey !== 'string') return null
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return null
+
   const parts = licenseKey.split('.')
   if (parts.length !== 3 || parts[0] !== LICENSE_PREFIX) return null
 
@@ -218,6 +220,7 @@ export const verifyLicenseKey = (
   const brokerServerMatches =
     expected.brokerServer === undefined ||
     (typeof expected.brokerServer === 'string' &&
+      typeof payload.broker_server === 'string' &&
       payload.broker_server.toLowerCase() === expected.brokerServer.toLowerCase())
   if (
     (expected.accountLogin !== undefined && accountLogin !== expected.accountLogin) ||

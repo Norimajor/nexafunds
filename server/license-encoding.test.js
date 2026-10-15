@@ -143,6 +143,8 @@ test('rejects an invalid signature and licenses used by another account', () => 
   assert.equal(verifyLicenseKey(key, { productId: 'nexa-ml' }, secret), null)
   assert.equal(verifyLicenseKey(key, { accountType: 'real' }, secret), null)
   assert.equal(verifyLicenseKey(key, { brokerServer: 'Other-Server' }, secret), null)
+  assert.equal(verifyLicenseKey(key, null, secret), null)
+  assert.equal(verifyLicenseKey(key, 'not-an-object', secret), null)
 })
 
 test('requires an adequately sized signing secret', () => {

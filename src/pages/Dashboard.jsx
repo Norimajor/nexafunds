@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, Eye, EyeOff, LayoutDashboard, LogOut, Menu, Settings2, ShieldCheck, Sun, Moon } from 'lucide-react'
+import { ArrowLeftRight, BrainCircuit, ChartNoAxesCombined, Eye, EyeOff, LayoutDashboard, LogOut, Menu, Radio, Settings2, ShieldCheck, Sun, Moon } from 'lucide-react'
 import { useEconomicForecasts } from '../hooks/useEconomicForecasts'
 import { PortalNavigation } from '../components/PortalSidebar'
 import EaAccess from './EaAccess'
@@ -10,6 +10,7 @@ const navItems = [
   { label: 'EA access', icon: ShieldCheck },
   { label: 'Portfolio', icon: ChartNoAxesCombined },
   { label: 'Transactions', icon: ArrowLeftRight },
+  { label: 'Streaming', icon: Radio },
   { label: 'Strategy AI', icon: BrainCircuit },
 ]
 
@@ -377,6 +378,7 @@ const goTo = (labelName) => {
   setActiveNav(labelName)
   if (labelName === 'Portfolio') navigate('/portfolio')
   if (labelName === 'Transactions') navigate('/transactions')
+  if (labelName === 'Streaming') navigate('/streaming')
   if (labelName === 'Strategy AI') navigate('/strategy-ai')
 }
 

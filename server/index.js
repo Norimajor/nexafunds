@@ -11,7 +11,9 @@ import { fileURLToPath } from 'url'
 import strategyRouter from './routes/strategy.js'
 import mlRouter from './routes/ml.js'
 import { createLicenseRouter } from './routes/licenses.js'
+import { createStreamingRouter } from './routes/streaming.js'
 import { createPostgresUserStore } from './user-store.js'
+import { createStreamingSchema } from './streaming-schema.js'
 
 dotenv.config()
 
@@ -64,7 +66,14 @@ app.use(
   })
 )
 
-app.use(express.json({ limit: '1mb' }))
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, _res, buffer) => {
+    if (req.originalUrl.split('?')[0] === '/api/streaming/stripe/webhook') {
+      req.rawBody = Buffer.from(buffer)
+    }
+  },
+}))
 
 // ============================================================
 // SESSION
@@ -250,6 +259,10 @@ const initDatabases = async () => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`
   )
+  await createStreamingSchema({
+    execute: (sql) => run(db, sql),
+    userIdType: 'INTEGER',
+  })
 
   await run(
     db,
@@ -924,6 +937,19 @@ const requireAdmin = (req, res, next) => {
   }
   next()
 }
+
+app.use(
+  '/api/streaming',
+  createStreamingRouter({
+    db: userDb,
+    requireAuth,
+    asyncRoute,
+    run,
+    get,
+    all,
+    transaction,
+  })
+)
 
 app.use(
   '/api',

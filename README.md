@@ -137,6 +137,44 @@ Never embed an admin key or a shared ingestion credential in the EA. Signed lice
 keys are stored server-side for entitlement lookup; never expose the database or
 its contents to clients.
 
+## Nexa Stream
+
+The authenticated Streaming page is linked immediately before Strategy AI. It
+provides creator profiles, searchable creators and follows, a video feed with
+likes and comments, LiveKit rooms for live video/screen sharing, a live chat,
+trading-themed gifts, and administrator-managed gold verification. Stripe
+checkout offers fixed KSh bundles (10/50/100/500 coins for KSh10/KSh50/KSh100/
+KSh500) and trading gifts cost 5/10/50/100 coins. Signed webhook events credit
+the server-side coin wallet. Creator gift earnings are tracked in coins only;
+cash conversion, payouts, and ads are deliberately not enabled in this release.
+
+Before enabling the streaming features:
+
+1. Link the existing Neon project and confirm it is in an Object Storage/Functions
+   supported region (`aws-us-east-2`, `aws-us-east-1`, `aws-eu-central-1`, or
+   `aws-ap-southeast-1`). Review the bucket change in `neon.ts` and run `neon deploy`
+   to provision the private `stream-media` bucket.
+2. Add the branch's Neon Object Storage values (`AWS_ACCESS_KEY_ID`,
+   `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, and `AWS_REGION`) to the API
+   hosting environment. Keep them server-side.
+3. Configure `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` for the
+   LiveKit project. LiveKit credentials must never be sent to the browser; the API
+   creates short-lived room tokens.
+4. Configure `STREAM_ADMIN_EMAIL` and `STREAM_ADMIN_USER_ID` to the exact email
+   and account ID of the intended administrator,
+   `STREAMING_PUBLIC_URL` to the deployed frontend origin, `STRIPE_SECRET_KEY`,
+   and `STRIPE_WEBHOOK_SECRET`. In Stripe, subscribe the HTTPS endpoint
+   `/api/streaming/stripe/webhook` to `checkout.session.completed`.
+
+The existing account login flow does not enforce email verification. The
+streaming-admin check therefore requires both a matching email and the numeric
+account ID, configured server-side after the intended account is registered and
+its credentials are secured. The account ID is returned by the authenticated
+`GET /api/auth/me` endpoint. Stripe payments are configured as fixed-price KES
+bundles. Confirm that the Stripe account can accept KES payments before enabling
+checkout in production.
+Choose and publish the applicable gift/coin terms before accepting real payments.
+
 Optional timeout configuration:
 
 ```env
