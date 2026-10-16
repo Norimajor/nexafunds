@@ -30,6 +30,15 @@ const VIDEO_TYPES = new Map([
 const now = () => new Date().toISOString()
 const isPostgresId = (value) => /^\d+$/.test(String(value))
 
+const defaultCreatorUsername = (user) => {
+  const base = `${user.first_name || ''}-${user.last_name || ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 32)
+  return `${base || 'trader'}_${user.id}`.slice(0, 40)
+}
+
 const getStorageConfig = () => {
   const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL_S3, AWS_REGION } = process.env
   if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY || !AWS_ENDPOINT_URL_S3 || !AWS_REGION) {
@@ -120,12 +129,7 @@ const makeProfile = async ({ db, get, run }, user) => {
   const existing = await get(db, 'SELECT * FROM creator_profiles WHERE user_id = ?', [user.id])
   if (existing) return existing
 
-  const baseUsername = `${user.first_name || ''}-${user.last_name || ''}`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 32)
-  const username = `${baseUsername || 'trader'}_${user.id}`.slice(0, 40)
+  const username = defaultCreatorUsername(user)
   const displayName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || username
   await run(
     db,
@@ -147,9 +151,19 @@ const isStreamingAdmin = (user) =>
       user.email.trim().toLowerCase() === process.env.STREAM_ADMIN_EMAIL.trim().toLowerCase()
   )
 
-const presentProfile = (profile, { isAdmin = false, followers = 0, following = 0, isFollowing = false } = {}) => ({
+const presentProfile = (
+  profile,
+  {
+    isAdmin = false,
+    followers = 0,
+    following = 0,
+    isFollowing = false,
+    usernameIsDefault = false,
+  } = {}
+) => ({
   user_id: profile.user_id,
   username: profile.username,
+  username_is_default: usernameIsDefault,
   display_name: profile.display_name,
   bio: profile.bio,
   avatar_url: null,
@@ -319,6 +333,9 @@ export const createStreamingRouter = ({
     return Number(result?.likes || 0)
   }
 
+  const displayUsername = (profile) =>
+    `@${profile.username}${profile.is_verified ? ' ✓' : ''}`
+
   const issueRoomToken = async (roomName, user, displayName, canPublish) => {
     return createLiveKitRoomToken({
       roomName,
@@ -369,6 +386,8 @@ export const createStreamingRouter = ({
           isAdmin: isStreamingAdmin(req.session.user),
           followers: counts.followers,
           following: counts.following,
+          usernameIsDefault:
+            profile.username === defaultCreatorUsername(req.session.user),
         }),
         wallet: {
           balance_coins: Number(wallet?.balance_coins || 0),
@@ -377,6 +396,60 @@ export const createStreamingRouter = ({
         },
         gifts: Object.values(GIFTS),
         coin_bundles: Object.values(COIN_BUNDLES),
+      })
+    })
+  )
+
+  router.get(
+    '/profile/me/verification-request',
+    requireAuth,
+    asyncRoute(async (req, res) => {
+      const request = await get(
+        db,
+        `SELECT id, request_message, status, created_at, reviewed_at
+         FROM creator_verification_requests
+         WHERE user_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [req.session.user.id]
+      )
+      res.json({ success: true, request: request || null })
+    })
+  )
+
+  router.post(
+    '/profile/me/verification-request',
+    requireAuth,
+    asyncRoute(async (req, res) => {
+      const profile = await ensureOwnProfile(req.session.user)
+      if (profile.is_verified || isStreamingAdmin(req.session.user)) {
+        return sendHttpError(res, 409, 'Your account already has a golden verification tick.')
+      }
+      const message = String(req.body?.request_message || '').trim()
+      if (message.length < 20 || message.length > 1000) {
+        return sendHttpError(res, 400, 'Explain your verification request in 20–1,000 characters.')
+      }
+      const pending = await get(
+        db,
+        `SELECT id FROM creator_verification_requests
+         WHERE user_id = ? AND status = 'pending'`,
+        [req.session.user.id]
+      )
+      if (pending) {
+        return sendHttpError(res, 409, 'You already have a verification request awaiting review.')
+      }
+      const id = randomUUID()
+      const createdAt = now()
+      await run(
+        db,
+        `INSERT INTO creator_verification_requests
+           (id, user_id, request_message, status, created_at)
+         VALUES (?, ?, ?, 'pending', ?)`,
+        [id, req.session.user.id, message, createdAt]
+      )
+      res.status(201).json({
+        success: true,
+        request: { id, request_message: message, status: 'pending', created_at: createdAt },
       })
     })
   )
@@ -412,7 +485,11 @@ export const createStreamingRouter = ({
       const profile = await get(db, 'SELECT * FROM creator_profiles WHERE user_id = ?', [req.session.user.id])
       res.json({
         success: true,
-        profile: presentProfile(profile, { isAdmin: isStreamingAdmin(req.session.user) }),
+        profile: presentProfile(profile, {
+          isAdmin: isStreamingAdmin(req.session.user),
+          usernameIsDefault:
+            profile.username === defaultCreatorUsername(req.session.user),
+        }),
       })
     })
   )
@@ -840,13 +917,14 @@ export const createStreamingRouter = ({
           started_at: startedAt,
           username: profile.username,
           display_name: profile.display_name,
+          is_verified: Boolean(profile.is_verified),
           likes: 0,
         },
         livekit_url: process.env.LIVEKIT_URL,
         token: await issueRoomToken(
           roomName,
           req.session.user,
-          `${profile.display_name} (@${profile.username})`,
+          displayUsername(profile),
           true
         ),
       })
@@ -862,7 +940,7 @@ export const createStreamingRouter = ({
       }
       const stream = await get(
         db,
-        `SELECT s.id, s.host_user_id, s.room_name, s.title, p.display_name, p.username
+        `SELECT s.id, s.host_user_id, s.room_name, s.title, p.display_name, p.username, p.is_verified
          FROM creator_live_sessions s
          JOIN creator_profiles p ON p.user_id = s.host_user_id
          WHERE s.id = ? AND s.status = 'live'`,
@@ -878,9 +956,9 @@ export const createStreamingRouter = ({
       )
       const isCohost = Boolean(cohost?.accepted_at)
       const viewerProfile = isHost
-        ? { username: stream.username, display_name: stream.display_name }
+        ? { username: stream.username, display_name: stream.display_name, is_verified: stream.is_verified }
         : await ensureOwnProfile(req.session.user)
-      const participantName = `${viewerProfile.display_name} (@${viewerProfile.username})`
+      const participantName = displayUsername(viewerProfile)
       res.json({
         success: true,
         stream: {
@@ -888,6 +966,7 @@ export const createStreamingRouter = ({
           title: stream.title,
           display_name: stream.display_name,
           username: stream.username,
+          is_verified: Boolean(stream.is_verified),
           likes: await getLiveLikeCount(stream.id),
         },
         livekit_url: process.env.LIVEKIT_URL,
@@ -988,7 +1067,7 @@ export const createStreamingRouter = ({
       }
       const stream = await get(
         db,
-        `SELECT s.id, s.room_name, s.title, p.username, p.display_name
+        `SELECT s.id, s.room_name, s.title, p.username, p.display_name, p.is_verified
          FROM creator_live_sessions s
          JOIN creator_profiles p ON p.user_id = s.host_user_id
          JOIN creator_live_cohosts c ON c.live_session_id = s.id
@@ -1012,13 +1091,14 @@ export const createStreamingRouter = ({
           title: stream.title,
           display_name: stream.display_name,
           username: stream.username,
+          is_verified: Boolean(stream.is_verified),
           likes: await getLiveLikeCount(stream.id),
         },
         livekit_url: process.env.LIVEKIT_URL,
         token: await issueRoomToken(
           stream.room_name,
           req.session.user,
-          `${profile.display_name} (@${profile.username})`,
+          displayUsername(profile),
           true
         ),
       })

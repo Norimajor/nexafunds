@@ -16,6 +16,7 @@ export default function AdminLicenses() {
   const [rememberAdminKey, setRememberAdminKey] = useState(true)
   const [hasSavedAdminKey, setHasSavedAdminKey] = useState(() => Boolean(readSavedAdminKey()))
   const [licenses, setLicenses] = useState([])
+  const [verificationRequests, setVerificationRequests] = useState([])
   const [products, setProducts] = useState([])
   const [signingConfigured, setSigningConfigured] = useState(false)
   const [uploadFiles, setUploadFiles] = useState({})
@@ -31,13 +32,15 @@ export default function AdminLicenses() {
     setLoading(true)
     try {
       const headers = { 'x-admin-key': key }
-      const [licenseResponse, eaResponse] = await Promise.all([
+      const [licenseResponse, eaResponse, verificationResponse] = await Promise.all([
         fetch(`${API_BASE}/api/admin/licenses`, { headers }),
         fetch(`${API_BASE}/api/admin/ea`, { headers }),
+        fetch(`${API_BASE}/api/admin/creator-verification-requests`, { headers }),
       ])
-      const [licenseData, eaData] = await Promise.all([
+      const [licenseData, eaData, verificationData] = await Promise.all([
         licenseResponse.json(),
         eaResponse.json(),
+        verificationResponse.json(),
       ])
       if (!licenseResponse.ok || !licenseData.success) {
         throw new Error(licenseData.error || 'Unable to load account requests.')
@@ -45,7 +48,11 @@ export default function AdminLicenses() {
       if (!eaResponse.ok || !eaData.success) {
         throw new Error(eaData.error || 'Unable to check the EA upload status.')
       }
+      if (!verificationResponse.ok || !verificationData.success) {
+        throw new Error(verificationData.error || 'Unable to load creator verification requests.')
+      }
       setLicenses(licenseData.licenses || [])
+      setVerificationRequests(verificationData.requests || [])
       setProducts(eaData.products || [])
       setSigningConfigured(Boolean(eaData.license_configured))
       setAuthenticated(true)
@@ -168,6 +175,30 @@ export default function AdminLicenses() {
       await loadLicenses(adminKey)
     } catch (decisionError) {
       setError(decisionError.message || 'Unable to update the account request.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleCreatorVerificationDecision = async (requestId, decision) => {
+    setError('')
+    setBusyId(requestId)
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/admin/creator-verification-requests/${encodeURIComponent(requestId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+          body: JSON.stringify({ decision }),
+        }
+      )
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Unable to review the creator verification request.')
+      }
+      await loadLicenses(adminKey)
+    } catch (decisionError) {
+      setError(decisionError.message || 'Unable to review the creator verification request.')
     } finally {
       setBusyId(null)
     }
@@ -334,6 +365,63 @@ export default function AdminLicenses() {
                       <div className="nf-admin-actions">
                         <button className="nf-primary" type="button" disabled={busyId === license.id || !signingConfigured || !license.broker_server?.trim()} onClick={() => handleDecision(license.id, 'approve')}>{busyId === license.id ? 'Updating…' : 'Verify & approve'}</button>
                         <button className="nf-secondary" type="button" disabled={busyId === license.id} onClick={() => handleDecision(license.id, 'reject')}>Reject request</button>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="nf-panel nf-admin-queue">
+            <div className="nf-panel-heading">
+              <span className="nf-step-number">03</span>
+              <div>
+                <h2>Creator golden tick requests</h2>
+                <p>Approving a request automatically adds the golden tick to that creator’s username across Nexa Stream.</p>
+              </div>
+            </div>
+            {verificationRequests.length === 0 ? (
+              <p className="nf-empty-state">No creator verification requests yet.</p>
+            ) : (
+              <div className="nf-license-list">
+                {verificationRequests.map((request) => (
+                  <article className="nf-license-card" key={request.id}>
+                    <div className="nf-license-card-heading">
+                      <div>
+                        <strong>
+                          @{request.username || 'creator'}
+                          {request.is_verified && <span className="ml-1 text-amber-400" aria-label="Verified">✓</span>}
+                        </strong>
+                        <span>{request.display_name} · {request.email}</span>
+                      </div>
+                      <span className={`nf-status nf-status-${request.status}`}>
+                        {request.status === 'pending' ? 'Needs review' : request.status}
+                      </span>
+                    </div>
+                    <p className="nf-admin-account whitespace-pre-wrap">{request.request_message}</p>
+                    <p className="nf-review-note">
+                      Submitted {new Date(request.created_at).toLocaleString()}
+                      {request.reviewed_at ? ` · Reviewed ${new Date(request.reviewed_at).toLocaleString()}` : ''}
+                    </p>
+                    {request.status === 'pending' && (
+                      <div className="nf-admin-actions">
+                        <button
+                          className="nf-primary"
+                          type="button"
+                          disabled={busyId === request.id}
+                          onClick={() => handleCreatorVerificationDecision(request.id, 'approve')}
+                        >
+                          {busyId === request.id ? 'Updating…' : 'Approve & add tick'}
+                        </button>
+                        <button
+                          className="nf-secondary"
+                          type="button"
+                          disabled={busyId === request.id}
+                          onClick={() => handleCreatorVerificationDecision(request.id, 'reject')}
+                        >
+                          Reject request
+                        </button>
                       </div>
                     )}
                   </article>

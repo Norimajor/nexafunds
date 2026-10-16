@@ -1,7 +1,34 @@
 import { useRef, useState } from 'react'
-import { LiveKitRoom, VideoConference } from '@livekit/components-react'
+import {
+  GridLayout,
+  LiveKitRoom,
+  ParticipantTile,
+  RoomAudioRenderer,
+  useTracks,
+  VideoConference,
+} from '@livekit/components-react'
 import '@livekit/components-styles'
 import { ArrowUpRight, Heart, MessageCircle, Radio, Send, X } from 'lucide-react'
+import { Track } from 'livekit-client'
+
+function ViewerLiveStage() {
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false }
+  )
+
+  return (
+    <div className="lk-video-conference" style={{ height: 'min(72vh, 760px)' }}>
+      <GridLayout tracks={tracks}>
+        <ParticipantTile />
+      </GridLayout>
+      <RoomAudioRenderer />
+    </div>
+  )
+}
 
 export default function StreamingLiveRoom({
   stream,
@@ -15,9 +42,11 @@ export default function StreamingLiveRoom({
   invitationBusy,
 }) {
   const lastTapRef = useRef(0)
+  const currentTokenRef = useRef(stream.token)
   const [candleCount, setCandleCount] = useState(0)
   const [cohostUsername, setCohostUsername] = useState('')
   const isPublisher = stream.isHost || stream.isCohost
+  currentTokenRef.current = stream.token
 
   const handleLikeTap = () => {
     const tappedAt = Date.now()
@@ -81,13 +110,15 @@ export default function StreamingLiveRoom({
               connect
               audio={isPublisher}
               video={isPublisher}
-              onDisconnected={onClose}
+              onDisconnected={() => {
+                if (currentTokenRef.current === stream.token) onClose()
+              }}
               data-lk-theme="default"
               style={{ height: 'min(72vh, 760px)' }}
             >
-              <VideoConference />
+              {isPublisher ? <VideoConference /> : <ViewerLiveStage />}
             </LiveKitRoom>
-            <div className="absolute bottom-5 right-5 z-10">
+            <div className="absolute right-4 top-4 z-10">
               {candleCount > 0 && (
                 <div
                   key={candleCount}

@@ -428,6 +428,80 @@ export const createLicenseRouter = ({
   )
 
   router.get(
+    '/admin/creator-verification-requests',
+    requireAdmin,
+    asyncRoute(async (_req, res) => {
+      const requests = await all(
+        db,
+        `SELECT r.id, r.user_id, r.request_message, r.status, r.created_at, r.reviewed_at,
+                p.username, p.display_name, p.is_verified, u.email
+         FROM creator_verification_requests r
+         JOIN users u ON u.id = r.user_id
+         LEFT JOIN creator_profiles p ON p.user_id = r.user_id
+         ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END, r.created_at DESC
+         LIMIT 200`
+      )
+      res.json({
+        success: true,
+        requests: requests.map((request) => ({
+          ...request,
+          is_verified: Boolean(request.is_verified),
+        })),
+      })
+    })
+  )
+
+  router.patch(
+    '/admin/creator-verification-requests/:requestId',
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      const decision = String(req.body?.decision || '').trim().toLowerCase()
+      if (!['approve', 'reject'].includes(decision)) {
+        return res.status(400).json({ success: false, error: 'Decision must be approve or reject.' })
+      }
+      const request = await get(
+        db,
+        `SELECT id, user_id, status FROM creator_verification_requests WHERE id = ?`,
+        [req.params.requestId]
+      )
+      if (!request) {
+        return res.status(404).json({ success: false, error: 'Verification request not found.' })
+      }
+      if (request.status !== 'pending') {
+        return res.status(409).json({ success: false, error: 'This verification request has already been reviewed.' })
+      }
+
+      const status = decision === 'approve' ? 'approved' : 'rejected'
+      const reviewedAt = new Date().toISOString()
+      const reviewed = await transaction(db, async (execute) => {
+        const updated = await execute(
+          `UPDATE creator_verification_requests
+           SET status = ?, reviewed_at = ?
+           WHERE id = ? AND status = 'pending'`,
+          [status, reviewedAt, request.id]
+        )
+        if (!updated.changes) return false
+        if (status === 'approved') {
+          await execute(
+            `UPDATE creator_profiles
+             SET is_verified = TRUE, verified_at = ?, verified_by = NULL
+             WHERE user_id = ?`,
+            [reviewedAt, request.user_id]
+          )
+        }
+        return true
+      })
+      if (!reviewed) {
+        return res.status(409).json({
+          success: false,
+          error: 'This verification request has already been reviewed.',
+        })
+      }
+      res.json({ success: true, status })
+    })
+  )
+
+  router.get(
     '/admin/ea',
     requireAdmin,
     asyncRoute(async (_req, res) => {

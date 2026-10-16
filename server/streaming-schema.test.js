@@ -81,6 +81,29 @@ test('creates streaming tables in SQLite and enforces follow/gift constraints', 
     )
     await executeSqlite(
       database,
+      `INSERT INTO creator_verification_requests
+         (id, user_id, request_message, status, created_at)
+       VALUES ('verify-one', 1, 'I am requesting creator verification.', 'pending', CURRENT_TIMESTAMP)`
+    )
+    const duplicateVerificationRequest = executeSqlite(
+      database,
+      `INSERT INTO creator_verification_requests
+         (id, user_id, request_message, status, created_at)
+       VALUES ('verify-two', 1, 'I am requesting another verification.', 'pending', CURRENT_TIMESTAMP)`
+    )
+    await assert.rejects(duplicateVerificationRequest, /UNIQUE constraint failed/)
+    await executeSqlite(
+      database,
+      `UPDATE creator_verification_requests SET status = 'rejected' WHERE id = 'verify-one'`
+    )
+    await executeSqlite(
+      database,
+      `INSERT INTO creator_verification_requests
+         (id, user_id, request_message, status, created_at)
+       VALUES ('verify-two', 1, 'I am requesting an updated verification.', 'pending', CURRENT_TIMESTAMP)`
+    )
+    await executeSqlite(
+      database,
       `INSERT INTO creator_live_likes (live_session_id, user_id, likes, updated_at)
        VALUES ('live-one', 1, 1, CURRENT_TIMESTAMP)
        ON CONFLICT (live_session_id, user_id)
@@ -133,6 +156,7 @@ test('uses the persistent PostgreSQL user ID type in every streaming relation', 
   assert.ok(statements.some((sql) => sql.includes('host_user_id BIGINT NOT NULL REFERENCES users(id)')))
   assert.ok(statements.some((sql) => sql.includes('user_id BIGINT NOT NULL REFERENCES users(id)')))
   assert.ok(statements.some((sql) => sql.includes('invited_by BIGINT NOT NULL REFERENCES users(id)')))
+  assert.ok(statements.some((sql) => sql.includes('reviewed_by BIGINT REFERENCES users(id)')))
 })
 
 test('prices the requested KSh coin bundles in KES minor units', () => {
@@ -177,7 +201,7 @@ test('LiveKit viewer tokens can subscribe but cannot publish media or data', () 
   const token = createLiveKitRoomToken({
     roomName: 'nexa-test-room',
     user: { id: 12 },
-    displayName: 'Viewer (@viewer)',
+    displayName: '@viewer',
     canPublish: false,
     apiKey: 'test-api-key',
     apiSecret: 'test-api-secret',
@@ -194,7 +218,7 @@ test('LiveKit viewer tokens can subscribe but cannot publish media or data', () 
   assert.equal(decoded.video.canSubscribe, true)
   assert.equal(decoded.video.canPublish, false)
   assert.equal(decoded.video.canPublishData, false)
-  assert.equal(decoded.name, 'Viewer (@viewer)')
+  assert.equal(decoded.name, '@viewer')
 
   const ownerClaims = JSON.parse(
     Buffer.from(

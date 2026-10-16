@@ -11,6 +11,17 @@ export const createStreamingSchema = async ({ execute, userIdType }) => {
       verified_by ${userIdType},
       created_at TEXT NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS creator_verification_requests (
+      id TEXT PRIMARY KEY,
+      user_id ${userIdType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      request_message TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+      created_at TEXT NOT NULL,
+      reviewed_at TEXT,
+      reviewed_by ${userIdType} REFERENCES users(id) ON DELETE SET NULL
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS creator_verification_one_pending_idx
+     ON creator_verification_requests(user_id) WHERE status = 'pending'`,
     `CREATE TABLE IF NOT EXISTS creator_follows (
       follower_id ${userIdType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       followed_id ${userIdType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,

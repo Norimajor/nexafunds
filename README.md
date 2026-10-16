@@ -150,8 +150,12 @@ cash conversion, payouts, and ads are deliberately not enabled in this release.
 Live viewers join with subscribe-only access; only the owner can invite a creator
 to cohost, and the invitee must accept before publishing. Viewers can double-tap
 the live stage to add a like, while profile follower/following counts open the
-corresponding creator lists. Creators can set the username shown to viewers in
-their profile editor; configured streaming admins can award or remove gold ticks.
+corresponding creator lists. Creators choose the username shown to viewers in
+their profile editor and can request a gold verification tick there. The
+configured streaming administrator reviews requests at `/admin/licenses` using
+`ADMIN_API_KEY`; approving a request automatically displays the tick after the
+creator's username. The configured streaming administrator's own account is
+verified automatically.
 
 Before enabling the streaming features:
 

@@ -48,6 +48,15 @@ function VerifiedBadge({ className = '' }) {
   )
 }
 
+function CreatorUsername({ profile, className = '' }) {
+  return (
+    <span className={`inline-flex items-center gap-1 ${className}`}>
+      <span>@{profile.username}</span>
+      {profile.is_verified && <VerifiedBadge />}
+    </span>
+  )
+}
+
 function CreatorName({ profile, onClick }) {
   return (
     <button
@@ -56,7 +65,6 @@ function CreatorName({ profile, onClick }) {
       className="inline-flex min-w-0 items-center gap-1.5 text-left font-semibold text-[#f3f1e9] hover:text-[#eac16e]"
     >
       <span className="truncate">{profile.display_name}</span>
-      {profile.is_verified && <VerifiedBadge />}
     </button>
   )
 }
@@ -70,8 +78,7 @@ function CommentList({ comments, draft, setDraft, onSubmit, busy }) {
         ) : (
           comments.map((comment) => (
             <div key={comment.id} className="flex items-start gap-2 text-sm">
-              <span className="font-semibold text-[#eac16e]">@{comment.username}</span>
-              {comment.is_verified && <VerifiedBadge className="mt-0.5" />}
+              <CreatorUsername profile={comment} className="font-semibold text-[#eac16e]" />
               <p className="min-w-0 break-words text-[#d1d5cc]">{comment.body}</p>
             </div>
           ))
@@ -117,6 +124,9 @@ export default function Streaming() {
   const [notice, setNotice] = useState('')
   const [profileEditorOpen, setProfileEditorOpen] = useState(false)
   const [profileForm, setProfileForm] = useState({ username: '', display_name: '', bio: '' })
+  const [verificationRequest, setVerificationRequest] = useState(null)
+  const [verificationMessage, setVerificationMessage] = useState('')
+  const [verificationBusy, setVerificationBusy] = useState(false)
   const [postCaption, setPostCaption] = useState('')
   const [videoFile, setVideoFile] = useState(null)
   const [posting, setPosting] = useState(false)
@@ -127,8 +137,6 @@ export default function Streaming() {
   const [commentDrafts, setCommentDrafts] = useState({})
   const [commentBusy, setCommentBusy] = useState(false)
   const [giftTarget, setGiftTarget] = useState(null)
-  const [adminProfiles, setAdminProfiles] = useState([])
-  const [adminOpen, setAdminOpen] = useState(false)
   const [connectionsPanel, setConnectionsPanel] = useState(null)
   const [connections, setConnections] = useState([])
   const [connectionsLoading, setConnectionsLoading] = useState(false)
@@ -138,6 +146,8 @@ export default function Streaming() {
   const [cohostBusy, setCohostBusy] = useState(false)
   const postFormRef = useRef(null)
   const closingStreamRef = useRef(false)
+  const profileLoaded = Boolean(profile)
+  const profileVerified = Boolean(profile?.is_verified)
 
   const loadFeed = useCallback(async ({ preservePosts = false } = {}) => {
     const data = await api('/feed')
@@ -151,8 +161,13 @@ export default function Streaming() {
   }, [])
 
   const loadProfile = useCallback(async () => {
-    const data = await api('/profile/me')
+    const [data, verificationData] = await Promise.all([
+      api('/profile/me'),
+      api('/profile/me/verification-request'),
+    ])
     setProfile(data.profile)
+    setProfileEditorOpen(Boolean(data.profile.username_is_default))
+    setVerificationRequest(verificationData.request)
     setWallet(data.wallet || { balance_coins: 0, gift_earnings_coins: 0 })
     setGifts(data.gifts || [])
     setBundles(data.coin_bundles || [])
@@ -237,6 +252,29 @@ export default function Streaming() {
     return () => window.clearInterval(timer)
   }, [activeStream])
 
+  useEffect(() => {
+    if (!profileLoaded || profileVerified) return undefined
+
+    const refreshVerificationStatus = async () => {
+      try {
+        const [profileData, requestData] = await Promise.all([
+          api('/profile/me'),
+          api('/profile/me/verification-request'),
+        ])
+        if (!profileVerified && profileData.profile.is_verified) {
+          setNotice('Your NexaFunds golden verification tick is now active.')
+        }
+        setProfile(profileData.profile)
+        setVerificationRequest(requestData.request)
+      } catch (requestError) {
+        setError(requestError.message)
+      }
+    }
+
+    const timer = window.setInterval(() => void refreshVerificationStatus(), 15000)
+    return () => window.clearInterval(timer)
+  }, [profileLoaded, profileVerified])
+
   const isOwnProfile = !username || profile?.username === username
   const displayedProfile = isOwnProfile ? profile : viewProfile
 
@@ -291,6 +329,25 @@ export default function Streaming() {
       }
     } catch (requestError) {
       setError(requestError.message)
+    }
+  }
+
+  const submitVerificationRequest = async (event) => {
+    event.preventDefault()
+    setVerificationBusy(true)
+    setError('')
+    try {
+      const data = await api('/profile/me/verification-request', {
+        method: 'POST',
+        body: JSON.stringify({ request_message: verificationMessage }),
+      })
+      setVerificationRequest(data.request)
+      setVerificationMessage('')
+      setNotice('Your golden tick request was submitted for review.')
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setVerificationBusy(false)
     }
   }
 
@@ -540,31 +597,6 @@ export default function Streaming() {
     }
   }
 
-  const loadAdminProfiles = async () => {
-    setError('')
-    try {
-      const data = await api('/admin/profiles')
-      setAdminProfiles(data.profiles || [])
-      setAdminOpen(true)
-    } catch (requestError) {
-      setError(requestError.message)
-    }
-  }
-
-  const setVerification = async (creator, verified) => {
-    setError('')
-    try {
-      await api(`/admin/profiles/${creator.user_id}/verification`, {
-        method: 'PATCH',
-        body: JSON.stringify({ verified }),
-      })
-      await loadAdminProfiles()
-      setNotice(verified ? `@${creator.username} is now verified.` : `Verification removed from @${creator.username}.`)
-    } catch (requestError) {
-      setError(requestError.message)
-    }
-  }
-
   const shownComments = (key) => commentLists[key] || []
 
   return (
@@ -638,14 +670,13 @@ export default function Streaming() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-xl font-bold">{displayedProfile.display_name}</h2>
-                        {displayedProfile.is_verified && <VerifiedBadge className="h-5 w-5" />}
                         {displayedProfile.is_admin && (
                           <span className="rounded-full border border-[#eac16e]/30 bg-[#eac16e]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#eac16e]">
                             Admin
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-[#a8b0a9]">@{displayedProfile.username}</p>
+                      <CreatorUsername profile={displayedProfile} className="text-sm text-[#a8b0a9]" />
                       {displayedProfile.bio && <p className="mt-2 max-w-2xl text-sm text-[#d1d5cc]">{displayedProfile.bio}</p>}
                       <div className="mt-3 flex gap-4 text-xs text-[#a8b0a9]">
                         <button type="button" onClick={() => void showConnections('followers')} className="hover:text-[#eac16e]">
@@ -666,15 +697,15 @@ export default function Streaming() {
                           onClick={() => setProfileEditorOpen((open) => !open)}
                           className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm hover:bg-white/[0.06]"
                         >
-                          <Settings2 size={16} /> Set username & profile
+                          <Settings2 size={16} /> {displayedProfile.username_is_default ? 'Create username' : 'Edit profile'}
                         </button>
                         {profile.is_admin && (
                           <button
                             type="button"
-                            onClick={() => (adminOpen ? setAdminOpen(false) : void loadAdminProfiles())}
+                            onClick={() => navigate('/admin/licenses')}
                             className="inline-flex items-center gap-2 rounded-xl border border-[#eac16e]/30 px-3 py-2 text-sm text-[#eac16e] hover:bg-[#eac16e]/10"
                           >
-                            <ShieldCheck size={16} /> Verification
+                            <ShieldCheck size={16} /> Review requests
                           </button>
                         )}
                       </>
@@ -693,8 +724,8 @@ export default function Streaming() {
                 {profileEditorOpen && isOwnProfile && (
                   <form onSubmit={saveProfile} className="mt-5 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-2">
                     <label className="text-xs text-[#a8b0a9]">
-                      Viewer-facing username
-                      <span className="mt-1 block text-[11px]">Viewers see this on your profile, videos, and live streams.</span>
+                      Create your viewer username
+                      <span className="mt-1 block text-[11px]">Viewers see this username in your live stream and beside your golden tick.</span>
                       <input
                         required
                         minLength={3}
@@ -733,6 +764,57 @@ export default function Streaming() {
               </section>
             )}
 
+            {isOwnProfile && (
+              <section className="rounded-3xl border border-[#eac16e]/20 bg-[#111a17] p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-[#eac16e]" />
+                  <div>
+                    <h2 className="font-semibold">Golden tick verification</h2>
+                    <p className="text-xs text-[#a8b0a9]">Submit a request for the NexaFunds team to review.</p>
+                  </div>
+                </div>
+                {profile.is_verified ? (
+                  <p className="text-sm text-[#5bd1a7]">
+                    Your username <CreatorUsername profile={profile} className="font-semibold" /> is verified.
+                  </p>
+                ) : verificationRequest?.status === 'pending' ? (
+                  <p className="text-sm text-[#eac16e]">
+                    Your request is awaiting review, submitted {new Date(verificationRequest.created_at).toLocaleDateString()}.
+                  </p>
+                ) : (
+                  <>
+                    {verificationRequest?.status === 'rejected' && (
+                      <p className="mb-3 text-sm text-rose-200">
+                        Your previous request was not approved. You may submit an updated request.
+                      </p>
+                    )}
+                    <form onSubmit={submitVerificationRequest} className="space-y-3">
+                      <label className="block text-xs text-[#a8b0a9]">
+                        Why should this creator account be verified?
+                        <textarea
+                          required
+                          minLength={20}
+                          maxLength={1000}
+                          rows={3}
+                          value={verificationMessage}
+                          onChange={(event) => setVerificationMessage(event.target.value)}
+                          placeholder="Share information that helps us confirm your creator identity and presence."
+                          className="mt-1 w-full resize-y rounded-xl border border-white/10 bg-[#0b1512] px-3 py-2 text-sm text-white outline-none focus:border-[#eac16e]/50"
+                        />
+                      </label>
+                      <button
+                        type="submit"
+                        disabled={verificationBusy}
+                        className="rounded-xl bg-[#eac16e] px-4 py-2 text-sm font-semibold text-[#0b100e] disabled:opacity-50"
+                      >
+                        {verificationBusy ? 'Submitting…' : 'Submit verification request'}
+                      </button>
+                    </form>
+                  </>
+                )}
+              </section>
+            )}
+
             {connectionsPanel && (
               <section className="rounded-3xl border border-[#eac16e]/20 bg-[#111a17] p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -755,9 +837,8 @@ export default function Streaming() {
                         <button type="button" onClick={() => openCreator(creator.username)} className="min-w-0 text-left">
                           <span className="flex items-center gap-1.5 truncate text-sm font-semibold">
                             {creator.display_name}
-                            {creator.is_verified && <VerifiedBadge />}
                           </span>
-                          <span className="block truncate text-xs text-[#a8b0a9]">@{creator.username}</span>
+                          <CreatorUsername profile={creator} className="block truncate text-xs text-[#a8b0a9]" />
                         </button>
                         {profile.username !== creator.username && (
                           <button
@@ -774,44 +855,6 @@ export default function Streaming() {
                 ) : (
                   <p className="text-sm text-[#a8b0a9]">No {connectionsPanel.type} yet.</p>
                 )}
-              </section>
-            )}
-
-            {adminOpen && profile.is_admin && (
-              <section className="rounded-3xl border border-[#eac16e]/20 bg-[#111a17] p-5">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="font-semibold">Golden tick verification</h2>
-                    <p className="text-xs text-[#a8b0a9]">Approve or remove the NexaFunds golden tick on creator profiles.</p>
-                  </div>
-                  <button type="button" onClick={() => setAdminOpen(false)} aria-label="Close verification panel">
-                    <X size={18} />
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {adminProfiles.map((creator) => (
-                    <div key={creator.user_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#0b1512] p-3">
-                      <div>
-                        <p className="flex items-center gap-1.5 text-sm font-semibold">
-                          {creator.display_name}
-                          {creator.is_verified && <VerifiedBadge />}
-                          {creator.is_admin && <span className="text-[10px] uppercase text-[#eac16e]">admin</span>}
-                        </p>
-                        <p className="text-xs text-[#a8b0a9]">@{creator.username} · {creator.email}</p>
-                      </div>
-                      {!creator.is_admin && (
-                        <button
-                          type="button"
-                          onClick={() => void setVerification(creator, !creator.is_verified)}
-                          className="rounded-lg border border-[#eac16e]/30 px-3 py-1.5 text-xs text-[#eac16e] hover:bg-[#eac16e]/10"
-                        >
-                          {creator.is_verified ? 'Remove badge' : 'Verify creator'}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {adminProfiles.length === 0 && <p className="text-sm text-[#a8b0a9]">No creator profiles to review yet.</p>}
-                </div>
               </section>
             )}
 
@@ -838,8 +881,9 @@ export default function Streaming() {
                             <span className="mb-3 inline-flex rounded-full bg-rose-500 px-2 py-1 text-[10px] font-bold uppercase">Join live</span>
                             <p className="line-clamp-2 text-sm font-semibold">{stream.title}</p>
                             <span className="mt-2 flex items-center gap-1 text-xs text-[#a8b0a9]">
-                              {stream.display_name} {stream.is_verified && <VerifiedBadge />}
+                              {stream.display_name}
                             </span>
+                            <CreatorUsername profile={stream} className="mt-1 text-xs text-[#a8b0a9]" />
                             <span className="mt-2 flex items-center gap-1 text-xs text-rose-300">
                               <Heart size={13} fill="currentColor" /> {Number(stream.likes || 0).toLocaleString()} likes
                             </span>
@@ -990,7 +1034,7 @@ export default function Streaming() {
                               onClick={() => openCreator(creator.username)}
                             />
                             <p className="text-xs text-[#a8b0a9]">
-                              @{creator.username} · {Number(creator.followers).toLocaleString()} followers
+                              <CreatorUsername profile={creator} /> · {Number(creator.followers).toLocaleString()} followers
                             </p>
                           </div>
                           <button
@@ -1042,7 +1086,7 @@ export default function Streaming() {
                               profile={post}
                               onClick={() => openCreator(post.username)}
                             />
-                            <p className="text-xs text-[#a8b0a9]">@{post.username}</p>
+                            <CreatorUsername profile={post} className="text-xs text-[#a8b0a9]" />
                           </div>
                           {profile.username !== post.username && (
                             <button
