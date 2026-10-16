@@ -1,15 +1,79 @@
 import { useRef, useState } from 'react'
 import {
+  ConnectionQualityIndicator,
   GridLayout,
   LiveKitRoom,
+  ParticipantPlaceholder,
   ParticipantTile,
   RoomAudioRenderer,
+  useParticipantInfo,
   useTracks,
+  VideoTrack,
   VideoConference,
 } from '@livekit/components-react'
 import '@livekit/components-styles'
 import { ArrowUpRight, Heart, MessageCircle, Radio, Send, X } from 'lucide-react'
 import { Track } from 'livekit-client'
+
+function CreatorVerificationBadge() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-label="Verified creator"
+      role="img"
+      className="h-[18px] w-[18px] shrink-0 drop-shadow-[0_0_5px_rgba(234,193,110,.65)]"
+    >
+      <path
+        d="m12 1.8 2.1 1.5 2.6-.3 1 2.4 2.4 1-.3 2.6 1.5 2.1-1.5 2.1.3 2.6-2.4 1-1 2.4-2.6-.3-2.1 1.5-2.1-1.5-2.6.3-1-2.4-2.4-1 .3-2.6L2.7 11l1.5-2.1-.3-2.6 2.4-1 1-2.4 2.6.3z"
+        fill="#eab84f"
+        stroke="#ffdd83"
+        strokeWidth="1"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m8.2 11.8 2.5 2.5 5.2-5.3"
+        fill="none"
+        stroke="#fff8e7"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function CreatorParticipantName() {
+  const { name, identity } = useParticipantInfo()
+  const participantName = name || identity || 'Viewer'
+  const isVerified = participantName.endsWith(' ✓')
+  const username = isVerified ? participantName.slice(0, -2) : participantName
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#d7a83f]/75 bg-[#11100e]/90 px-3 py-1.5 text-xs font-semibold text-white shadow-[0_0_14px_rgba(234,193,110,.16)] backdrop-blur-sm">
+      <span className="truncate">{username}</span>
+      {isVerified && <CreatorVerificationBadge />}
+    </span>
+  )
+}
+
+function ViewerParticipantTile() {
+  return (
+    <ParticipantTile>
+      <>
+        <VideoTrack />
+        <div className="lk-participant-placeholder">
+          <ParticipantPlaceholder />
+        </div>
+        <div className="lk-participant-metadata">
+          <div className="lk-participant-metadata-item">
+            <CreatorParticipantName />
+          </div>
+          <ConnectionQualityIndicator className="lk-participant-metadata-item" />
+        </div>
+      </>
+    </ParticipantTile>
+  )
+}
 
 function ViewerLiveStage() {
   const tracks = useTracks(
@@ -23,7 +87,7 @@ function ViewerLiveStage() {
   return (
     <div className="lk-video-conference" style={{ height: 'min(72vh, 760px)' }}>
       <GridLayout tracks={tracks}>
-        <ParticipantTile />
+        <ViewerParticipantTile />
       </GridLayout>
       <RoomAudioRenderer />
     </div>

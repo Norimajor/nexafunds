@@ -4,6 +4,7 @@ import sqlite3 from 'sqlite3'
 import {
   COIN_BUNDLES,
   createLiveKitRoomToken,
+  formatStreamParticipantName,
   getStreamingAllowedOrigins,
   GIFTS,
 } from './routes/streaming.js'
@@ -198,10 +199,13 @@ test('resolves the primary streaming URL and additional CORS origins', () => {
 })
 
 test('LiveKit viewer tokens can subscribe but cannot publish media or data', () => {
+  assert.equal(formatStreamParticipantName({ username: 'viewer', is_verified: false }), 'viewer')
+  assert.equal(formatStreamParticipantName({ username: 'creator_name', is_verified: true }), 'creator_name ✓')
+
   const token = createLiveKitRoomToken({
     roomName: 'nexa-test-room',
     user: { id: 12 },
-    displayName: '@viewer',
+    displayName: formatStreamParticipantName({ username: 'viewer', is_verified: false }),
     canPublish: false,
     apiKey: 'test-api-key',
     apiSecret: 'test-api-secret',
@@ -218,7 +222,7 @@ test('LiveKit viewer tokens can subscribe but cannot publish media or data', () 
   assert.equal(decoded.video.canSubscribe, true)
   assert.equal(decoded.video.canPublish, false)
   assert.equal(decoded.video.canPublishData, false)
-  assert.equal(decoded.name, '@viewer')
+  assert.equal(decoded.name, 'viewer')
 
   const ownerClaims = JSON.parse(
     Buffer.from(

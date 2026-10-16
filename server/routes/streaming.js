@@ -39,6 +39,9 @@ const defaultCreatorUsername = (user) => {
   return `${base || 'trader'}_${user.id}`.slice(0, 40)
 }
 
+export const formatStreamParticipantName = (profile) =>
+  `${profile.username}${profile.is_verified ? ' ✓' : ''}`
+
 const getStorageConfig = () => {
   const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL_S3, AWS_REGION } = process.env
   if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY || !AWS_ENDPOINT_URL_S3 || !AWS_REGION) {
@@ -332,9 +335,6 @@ export const createStreamingRouter = ({
     )
     return Number(result?.likes || 0)
   }
-
-  const displayUsername = (profile) =>
-    `@${profile.username}${profile.is_verified ? ' ✓' : ''}`
 
   const issueRoomToken = async (roomName, user, displayName, canPublish) => {
     return createLiveKitRoomToken({
@@ -924,7 +924,7 @@ export const createStreamingRouter = ({
         token: await issueRoomToken(
           roomName,
           req.session.user,
-          displayUsername(profile),
+          formatStreamParticipantName(profile),
           true
         ),
       })
@@ -958,7 +958,7 @@ export const createStreamingRouter = ({
       const viewerProfile = isHost
         ? { username: stream.username, display_name: stream.display_name, is_verified: stream.is_verified }
         : await ensureOwnProfile(req.session.user)
-      const participantName = displayUsername(viewerProfile)
+      const participantName = formatStreamParticipantName(viewerProfile)
       res.json({
         success: true,
         stream: {
@@ -1098,7 +1098,7 @@ export const createStreamingRouter = ({
         token: await issueRoomToken(
           stream.room_name,
           req.session.user,
-          displayUsername(profile),
+          formatStreamParticipantName(profile),
           true
         ),
       })
