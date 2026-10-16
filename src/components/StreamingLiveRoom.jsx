@@ -6,13 +6,23 @@ import {
   ParticipantPlaceholder,
   ParticipantTile,
   RoomAudioRenderer,
+  TrackToggle,
   useParticipantInfo,
   useTracks,
   VideoTrack,
-  VideoConference,
 } from '@livekit/components-react'
 import '@livekit/components-styles'
-import { ArrowUpRight, Heart, MessageCircle, Radio, Send, X } from 'lucide-react'
+import {
+  ArrowUpRight,
+  Heart,
+  MessageCircle,
+  Mic,
+  MonitorUp,
+  Radio,
+  Users,
+  Video,
+  X,
+} from 'lucide-react'
 import { Track } from 'livekit-client'
 
 function CreatorVerificationBadge() {
@@ -44,7 +54,7 @@ function CreatorVerificationBadge() {
 
 function CreatorParticipantName() {
   const { name, identity } = useParticipantInfo()
-  const participantName = name || identity || 'Viewer'
+  const participantName = name || identity || 'Creator'
   const isVerified = participantName.endsWith(' ✓')
   const username = isVerified ? participantName.slice(0, -2) : participantName
 
@@ -56,7 +66,7 @@ function CreatorParticipantName() {
   )
 }
 
-function ViewerParticipantTile() {
+function LiveParticipantTile() {
   return (
     <ParticipantTile>
       <>
@@ -75,21 +85,52 @@ function ViewerParticipantTile() {
   )
 }
 
-function ViewerLiveStage() {
+function LiveStage({ publisher }) {
   const tracks = useTracks(
     [
-      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.Camera, withPlaceholder: false },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
     ],
     { onlySubscribed: false }
   )
 
   return (
-    <div className="lk-video-conference" style={{ height: 'min(72vh, 760px)' }}>
+    <div className="lk-video-conference h-full min-h-0">
       <GridLayout tracks={tracks}>
-        <ViewerParticipantTile />
+        <LiveParticipantTile />
       </GridLayout>
       <RoomAudioRenderer />
+      {publisher && (
+        <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/10 bg-black/70 p-2 shadow-xl backdrop-blur">
+          <TrackToggle
+            source={Track.Source.Microphone}
+            showIcon={false}
+            aria-label="Toggle microphone"
+            title="Toggle microphone"
+            className="rounded-xl border border-white/10 bg-white/10 p-3 text-white hover:bg-white/20"
+          >
+            <Mic size={18} />
+          </TrackToggle>
+          <TrackToggle
+            source={Track.Source.Camera}
+            showIcon={false}
+            aria-label="Toggle camera"
+            title="Toggle camera"
+            className="rounded-xl border border-white/10 bg-white/10 p-3 text-white hover:bg-white/20"
+          >
+            <Video size={18} />
+          </TrackToggle>
+          <TrackToggle
+            source={Track.Source.ScreenShare}
+            showIcon={false}
+            aria-label="Share screen"
+            title="Share screen"
+            className="rounded-xl border border-[#eac16e]/40 bg-[#eac16e] p-3 text-[#15110a] hover:bg-[#f3d28c]"
+          >
+            <MonitorUp size={18} />
+          </TrackToggle>
+        </div>
+      )}
     </div>
   )
 }
@@ -104,6 +145,8 @@ export default function StreamingLiveRoom({
   cohostInvitation,
   onAcceptCohost,
   invitationBusy,
+  onFollow,
+  followingBusy,
 }) {
   const lastTapRef = useRef(0)
   const currentTokenRef = useRef(stream.token)
@@ -135,7 +178,7 @@ export default function StreamingLiveRoom({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-3 sm:p-6">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#050606]/95 p-2 text-white sm:p-4">
       <style>{`
         @keyframes bull-candle-rise {
           0% { opacity: 0; transform: translateY(18px) scale(.7); }
@@ -144,114 +187,154 @@ export default function StreamingLiveRoom({
           100% { opacity: 0; transform: translateY(-76px) scale(.92); }
         }
       `}</style>
-      <div className="w-full max-w-6xl overflow-hidden rounded-3xl border border-[#eac16e]/20 bg-[#081211] shadow-2xl">
-        <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
-          <div className="min-w-0">
-            <p className="truncate font-semibold text-[#f3f1e9]">{stream.title}</p>
-            <p className="text-xs text-[#a8b0a9]">
-              {stream.isHost
-                ? 'You are live as the owner. You can invite a cohost to publish.'
-                : stream.isCohost
-                  ? 'You are a cohost. Your camera and microphone are enabled.'
-                  : 'You are watching as a viewer. Only the owner and invited cohosts can publish.'}
+      <div className="flex h-[min(96vh,1000px)] w-full max-w-[1600px] flex-col overflow-hidden rounded-[26px] border border-[#d7a83f]/30 bg-[#0b0b0c] shadow-[0_24px_100px_rgba(0,0,0,.75)]">
+        <header className="flex min-h-[76px] items-center gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eac16e]/55 bg-[#15120b] text-sm font-black italic text-[#eac16e]">
+            N
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="max-w-[22rem] truncate text-sm font-bold sm:text-base">
+                {stream.display_name || stream.username || 'NexaFunds creator'}
+              </h1>
+              {stream.is_verified && <CreatorVerificationBadge />}
+              <span className="rounded-lg bg-rose-600 px-2.5 py-1 text-[10px] font-extrabold tracking-wide">LIVE</span>
+              <span className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/80">
+                <Users size={13} /> {Number(stream.followers || 0).toLocaleString()} followers
+              </span>
+            </div>
+            <p className="truncate text-xs text-white/50">
+              {stream.username || stream.title}
+              {stream.username && stream.title ? ` · ${stream.title}` : ''}
             </p>
           </div>
+          {!stream.isHost && stream.username && (
+            <button
+              type="button"
+              onClick={onFollow}
+              disabled={followingBusy}
+              className={`hidden rounded-xl border px-5 py-2 text-sm font-semibold transition disabled:opacity-50 sm:inline-flex ${
+                stream.is_following
+                  ? 'border-white/15 text-white/70 hover:bg-white/10'
+                  : 'border-[#eac16e] text-[#eac16e] hover:bg-[#eac16e]/10'
+              }`}
+            >
+              {followingBusy ? 'Updating…' : stream.is_following ? 'Following' : 'Follow'}
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-white/10 p-2 text-[#d1d5cc] hover:bg-white/10"
+            className="rounded-xl p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
             aria-label="Leave live stream"
           >
-            <X size={18} />
+            <X size={22} />
           </button>
-        </div>
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="relative" onClick={handleStageTap}>
-            <LiveKitRoom
-              key={stream.token}
-              serverUrl={stream.livekitUrl}
-              token={stream.token}
-              connect
-              audio={isPublisher}
-              video={isPublisher}
-              onDisconnected={() => {
-                if (currentTokenRef.current === stream.token) onClose()
-              }}
-              data-lk-theme="default"
-              style={{ height: 'min(72vh, 760px)' }}
-            >
-              {isPublisher ? <VideoConference /> : <ViewerLiveStage />}
-            </LiveKitRoom>
-            <div className="absolute right-4 top-4 z-10">
-              {candleCount > 0 && (
-                <div
-                  key={candleCount}
-                  className="pointer-events-none absolute -top-16 left-1/2 flex -translate-x-1/2 flex-col items-center text-emerald-300"
-                  style={{ animation: 'bull-candle-rise 1.15s ease-out forwards' }}
-                  aria-hidden="true"
-                >
-                  <ArrowUpRight size={24} strokeWidth={3} />
-                  <span className="relative my-1 h-7 w-3 rounded-sm bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,.65)] before:absolute before:left-1/2 before:top-[-7px] before:h-11 before:w-px before:-translate-x-1/2 before:bg-emerald-300 after:absolute after:left-1/2 after:bottom-[-7px] after:h-11 after:w-px after:-translate-x-1/2 after:bg-emerald-300" />
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={handleLikeTap}
-                className="flex min-w-20 flex-col items-center gap-1 rounded-2xl border border-rose-300/20 bg-[#111a17]/95 px-4 py-3 text-rose-300 shadow-lg transition hover:scale-105 hover:bg-rose-500/10 active:scale-95"
-                aria-label={`Double tap to like. ${Number(likes || 0).toLocaleString()} live likes`}
+        </header>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(260px,42%)] lg:grid-cols-[minmax(0,1fr)_350px] lg:grid-rows-1">
+          <main className="flex min-h-0 flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
+            <div className="relative min-h-0 flex-1 overflow-hidden bg-black" onClick={handleStageTap}>
+              <LiveKitRoom
+                key={stream.token}
+                serverUrl={stream.livekitUrl}
+                token={stream.token}
+                connect
+                audio={isPublisher}
+                video={isPublisher}
+                onDisconnected={() => {
+                  if (currentTokenRef.current === stream.token) onClose()
+                }}
+                data-lk-theme="default"
+                style={{ height: '100%', width: '100%' }}
               >
-                <Heart size={22} fill="currentColor" />
-                <span className="text-xs font-bold">{Number(likes || 0).toLocaleString()}</span>
-                <span className="text-[9px] uppercase tracking-wide">Double-tap</span>
-              </button>
-            </div>
-          </div>
-          <aside className="flex max-h-[min(72vh,760px)] flex-col border-t border-white/10 p-4 lg:border-l lg:border-t-0">
-            {stream.isHost && (
-              <form onSubmit={inviteCohost} className="mb-4 rounded-xl border border-[#eac16e]/15 bg-[#101a16] p-3">
-                <label htmlFor="live-cohost-username" className="mb-2 block text-xs font-semibold text-[#d1d5cc]">
-                  Invite a cohost by username
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    id="live-cohost-username"
-                    value={cohostUsername}
-                    onChange={(event) => setCohostUsername(event.target.value)}
-                    maxLength={40}
-                    pattern="@?[a-zA-Z0-9_]{3,40}"
-                    placeholder="@username"
-                    required
-                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#0b1512] px-3 py-2 text-sm text-white outline-none focus:border-[#eac16e]/50"
-                  />
-                  <button
-                    type="submit"
-                    disabled={invitationBusy}
-                    className="rounded-lg bg-[#eac16e] px-3 text-[#0b100e] disabled:opacity-50"
-                    aria-label="Invite cohost"
+                <LiveStage publisher={isPublisher} />
+              </LiveKitRoom>
+
+              <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[75%] rounded-2xl border border-white/10 bg-black/65 px-4 py-3 backdrop-blur-sm">
+                <p className="text-sm font-semibold text-white">{stream.title || 'Live trading session'}</p>
+              </div>
+              <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-4">
+                {candleCount > 0 && (
+                  <div
+                    key={candleCount}
+                    className="pointer-events-none absolute -top-16 left-1/2 flex -translate-x-1/2 flex-col items-center text-emerald-300"
+                    style={{ animation: 'bull-candle-rise 1.15s ease-out forwards' }}
+                    aria-hidden="true"
                   >
-                    <Send size={15} />
-                  </button>
+                    <ArrowUpRight size={24} strokeWidth={3} />
+                    <span className="relative my-1 h-7 w-3 rounded-sm bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,.65)] before:absolute before:left-1/2 before:top-[-7px] before:h-11 before:w-px before:-translate-x-1/2 before:bg-emerald-300 after:absolute after:left-1/2 after:bottom-[-7px] after:h-11 after:w-px after:-translate-x-1/2 after:bg-emerald-300" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleLikeTap}
+                  className="flex min-w-[62px] flex-col items-center gap-1 rounded-2xl bg-black/55 px-3 py-2 text-rose-400 backdrop-blur transition hover:scale-105 hover:bg-black/75 active:scale-95"
+                  aria-label={`Double tap to like. ${Number(likes || 0).toLocaleString()} live likes`}
+                >
+                  <Heart size={28} fill="currentColor" />
+                  <span className="text-xs font-bold text-white">{Number(likes || 0).toLocaleString()}</span>
+                </button>
+                <div className="flex min-w-[62px] flex-col items-center gap-1 rounded-2xl bg-black/55 px-3 py-2 text-white/90 backdrop-blur">
+                  <MessageCircle size={25} />
+                  <span className="text-[10px]">Chat</span>
                 </div>
-                {cohostInvitation && <p className="mt-2 text-xs text-[#5bd1a7]">{cohostInvitation}</p>}
+              </div>
+              <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-xl bg-black/45 px-3 py-2 text-xs text-white/75 backdrop-blur-sm">
+                {isPublisher
+                  ? stream.isHost ? 'You are live · only publishers appear on stage' : 'You are cohosting'
+                  : 'You are watching as a viewer'}
+              </div>
+            </div>
+            {stream.isHost && (
+              <form onSubmit={inviteCohost} className="flex shrink-0 items-center gap-2 border-t border-white/10 bg-[#101011] px-4 py-3">
+                <label htmlFor="live-cohost-username" className="hidden text-xs text-white/60 sm:block">
+                  Invite cohost
+                </label>
+                <input
+                  id="live-cohost-username"
+                  value={cohostUsername}
+                  onChange={(event) => setCohostUsername(event.target.value)}
+                  maxLength={40}
+                  pattern="@?[a-zA-Z0-9_]{3,40}"
+                  placeholder="@username"
+                  required
+                  className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-[#eac16e]/60"
+                />
+                <button
+                  type="submit"
+                  disabled={invitationBusy}
+                  className="rounded-xl bg-[#eac16e] px-4 py-2 text-sm font-semibold text-[#15110a] disabled:opacity-50"
+                >
+                  {invitationBusy ? 'Sending…' : 'Invite'}
+                </button>
+                {cohostInvitation && <span className="hidden text-xs text-emerald-300 xl:inline">{cohostInvitation}</span>}
               </form>
             )}
             {!stream.isHost && cohostInvitation && !stream.isCohost && (
-              <div className="mb-4 rounded-xl border border-[#eac16e]/20 bg-[#eac16e]/10 p-3">
-                <p className="text-xs text-[#f3f1e9]">The stream owner invited you to cohost.</p>
+              <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[#eac16e]/20 bg-[#eac16e]/10 px-4 py-3">
+                <p className="text-xs text-white">The stream owner invited you to cohost.</p>
                 <button
                   type="button"
                   onClick={onAcceptCohost}
                   disabled={invitationBusy}
-                  className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[#eac16e] px-3 py-2 text-xs font-bold text-[#0b100e] disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#eac16e] px-3 py-2 text-xs font-bold text-[#15110a] disabled:opacity-50"
                 >
-                  <Radio size={14} /> {invitationBusy ? 'Joining…' : 'Accept cohost invite'}
+                  <Radio size={14} /> {invitationBusy ? 'Joining…' : 'Accept invite'}
                 </button>
               </div>
             )}
-            <p className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <MessageCircle size={16} className="text-[#eac16e]" /> Live chat
-            </p>
-            {children}
+          </main>
+
+          <aside className="flex min-h-0 flex-col bg-[#0d0d0e]">
+            <div className="flex h-[62px] shrink-0 items-center border-b border-white/10 px-5">
+              <div className="flex h-full items-center border-b-2 border-[#eac16e] px-2 text-sm font-semibold">
+                Live chat
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4">
+              {children}
+            </div>
           </aside>
         </div>
       </div>

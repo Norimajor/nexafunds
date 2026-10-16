@@ -69,17 +69,25 @@ function CreatorName({ profile, onClick }) {
   )
 }
 
-function CommentList({ comments, draft, setDraft, onSubmit, busy }) {
+function CommentList({ comments, draft, setDraft, onSubmit, busy, compact = false }) {
   return (
-    <div className="mt-4 border-t border-white/[0.07] pt-4">
-      <div className="max-h-52 space-y-3 overflow-y-auto">
+    <div className={`mt-4 flex min-h-0 flex-col border-t border-white/[0.07] pt-4 ${compact ? 'flex-1' : ''}`}>
+      <div className={`space-y-3 overflow-y-auto ${compact ? 'min-h-0 flex-1' : 'max-h-52'}`}>
         {comments.length === 0 ? (
           <p className="text-sm text-[#a8b0a9]">Start the conversation.</p>
         ) : (
           comments.map((comment) => (
-            <div key={comment.id} className="flex items-start gap-2 text-sm">
-              <CreatorUsername profile={comment} className="font-semibold text-[#eac16e]" />
-              <p className="min-w-0 break-words text-[#d1d5cc]">{comment.body}</p>
+            <div key={comment.id} className="flex items-start gap-2.5 text-sm">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#d7a83f] to-[#436b62] text-[10px] font-bold text-[#111]">
+                {(comment.display_name || comment.username || 'C').slice(0, 1).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-1 text-xs font-semibold text-white/85">
+                  <span className="truncate">{comment.display_name || comment.username}</span>
+                  {comment.is_verified && <VerifiedBadge className="h-3.5 w-3.5" />}
+                </p>
+                <p className="mt-0.5 break-words text-sm text-[#d1d5cc]">{comment.body}</p>
+              </div>
             </div>
           ))
         )}
@@ -89,8 +97,8 @@ function CommentList({ comments, draft, setDraft, onSubmit, busy }) {
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           maxLength={500}
-          placeholder="Add a comment..."
-          aria-label="Add a comment"
+          placeholder={compact ? 'Type a message...' : 'Add a comment...'}
+          aria-label={compact ? 'Send a live chat message' : 'Add a comment'}
           className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#0b1512] px-3 py-2 text-sm text-white outline-none focus:border-[#eac16e]/50"
         />
         <button
@@ -144,6 +152,7 @@ export default function Streaming() {
   const [cohostInviteNotice, setCohostInviteNotice] = useState('')
   const [hasCohostInvitation, setHasCohostInvitation] = useState(false)
   const [cohostBusy, setCohostBusy] = useState(false)
+  const [liveFollowBusy, setLiveFollowBusy] = useState(false)
   const postFormRef = useRef(null)
   const closingStreamRef = useRef(false)
   const profileLoaded = Boolean(profile)
@@ -430,6 +439,8 @@ export default function Streaming() {
       setStartTitle('')
       setActiveStream({
         ...data.stream,
+        followers: Number(profile?.followers || 0),
+        is_following: false,
         livekitUrl: data.livekit_url,
         token: data.token,
         isHost: true,
@@ -453,6 +464,8 @@ export default function Streaming() {
       setActiveStream({
         ...data.stream,
         id: stream.id,
+        followers: Number(stream.followers || 0),
+        is_following: Boolean(stream.is_following),
         livekitUrl: data.livekit_url,
         token: data.token,
         isHost: data.is_host,
@@ -463,8 +476,53 @@ export default function Streaming() {
       setHasCohostInvitation(false)
       closingStreamRef.current = false
       setCommentTarget({ live_session_id: stream.id })
+      if (!data.is_host && !data.is_cohost) {
+        try {
+          const joinData = await api(`/live/${stream.id}/comments`, {
+            method: 'POST',
+            body: JSON.stringify({ body: 'joined the live' }),
+          })
+          const key = `live:${stream.id}`
+          setCommentLists((current) => ({
+            ...current,
+            [key]: current[key]?.some((comment) => comment.id === joinData.comment.id)
+              ? current[key]
+              : [...(current[key] || []), joinData.comment],
+          }))
+        } catch (requestError) {
+          setError(requestError.message)
+        }
+      }
     } catch (requestError) {
       setError(requestError.message)
+    }
+  }
+
+  const followLiveCreator = async () => {
+    if (!activeStream?.username || activeStream.isHost) return
+    setLiveFollowBusy(true)
+    setError('')
+    try {
+      const result = await api(`/profiles/${encodeURIComponent(activeStream.username)}/follow`, {
+        method: 'POST',
+      })
+      setActiveStream((current) => {
+        if (!current) return current
+        const wasFollowing = Boolean(current.is_following)
+        const followerChange = result.following === wasFollowing
+          ? 0
+          : result.following ? 1 : -1
+        return {
+          ...current,
+          is_following: result.following,
+          followers: Math.max(0, Number(current.followers || 0) + followerChange),
+        }
+      })
+      await loadFeed({ preservePosts: Boolean(username) })
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setLiveFollowBusy(false)
     }
   }
 
@@ -1191,31 +1249,34 @@ export default function Streaming() {
             cohostInvitation={activeStream.isHost ? cohostInviteNotice : hasCohostInvitation}
             onAcceptCohost={() => void acceptCohostInvite()}
             invitationBusy={cohostBusy}
+            onFollow={() => void followLiveCreator()}
+            followingBusy={liveFollowBusy}
           >
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <CommentList
-                comments={shownComments(`live:${activeStream.id}`)}
-                draft={commentDrafts[`live:${activeStream.id}`] || ''}
-                setDraft={(value) => setCommentDrafts((current) => ({ ...current, [`live:${activeStream.id}`]: value }))}
-                onSubmit={(event) => void submitComment(event, {
-                  key: `live:${activeStream.id}`,
-                  path: `/live/${activeStream.id}/comments`,
-                })}
-                busy={commentBusy}
-              />
-            </div>
-            <div className="mt-4 border-t border-white/10 pt-3">
-              <p className="mb-2 text-xs font-semibold text-[#a8b0a9]">Trading gifts</p>
+            <CommentList
+              comments={shownComments(`live:${activeStream.id}`)}
+              draft={commentDrafts[`live:${activeStream.id}`] || ''}
+              setDraft={(value) => setCommentDrafts((current) => ({ ...current, [`live:${activeStream.id}`]: value }))}
+              onSubmit={(event) => void submitComment(event, {
+                key: `live:${activeStream.id}`,
+                path: `/live/${activeStream.id}/comments`,
+              })}
+              busy={commentBusy}
+              compact
+            />
+            <div className="max-h-[38%] shrink-0 overflow-y-auto border-t border-white/10 py-3">
+              <p className="mb-2 flex items-center gap-2 px-1 text-xs font-semibold text-[#d1d5cc]">
+                <Sparkles size={14} className="text-[#eac16e]" /> Send a gift
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 {gifts.map((gift) => (
                   <button
                     type="button"
                     key={gift.gift_id}
                     onClick={() => void sendGift(gift, { live_session_id: activeStream.id })}
-                    className="rounded-xl border border-[#eac16e]/15 px-2 py-2 text-left text-xs hover:bg-[#eac16e]/10"
+                    className="rounded-xl border border-[#eac16e]/15 bg-white/[0.02] px-2 py-2 text-left text-xs hover:bg-[#eac16e]/10"
                   >
                     <span className="mr-1">{gift.icon}</span>{gift.name}
-                    <span className="mt-1 block text-[#eac16e]">{gift.coins} coins</span>
+                    <span className="mt-1 block text-[#eac16e]">◉ {gift.coins}</span>
                   </button>
                 ))}
               </div>

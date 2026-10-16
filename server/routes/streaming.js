@@ -708,13 +708,18 @@ export const createStreamingRouter = ({
         db,
         `SELECT s.id, s.host_user_id, s.title, s.started_at,
                 p.username, p.display_name, p.is_verified,
+                (SELECT COUNT(*) FROM creator_follows f
+                 WHERE f.followed_id = s.host_user_id) AS followers,
+                (SELECT COUNT(*) FROM creator_follows f
+                 WHERE f.follower_id = ? AND f.followed_id = s.host_user_id) AS is_following,
                 (SELECT COALESCE(SUM(l.likes), 0) FROM creator_live_likes l
                  WHERE l.live_session_id = s.id) AS likes
          FROM creator_live_sessions s
          JOIN creator_profiles p ON p.user_id = s.host_user_id
          WHERE s.status = 'live'
          ORDER BY s.started_at DESC
-         LIMIT 40`
+         LIMIT 40`,
+        [req.session.user.id]
       )
       const storage = getS3Client()
       res.json({
@@ -732,6 +737,8 @@ export const createStreamingRouter = ({
         live: live.map((stream) => ({
           ...stream,
           likes: Number(stream.likes || 0),
+          followers: Number(stream.followers || 0),
+          is_following: Boolean(stream.is_following),
           is_verified: Boolean(stream.is_verified),
         })),
         media_configured: Boolean(storage),
@@ -867,6 +874,7 @@ export const createStreamingRouter = ({
           created_at: createdAt,
           display_name: authorProfile.display_name,
           username: authorProfile.username,
+          is_verified: Boolean(authorProfile.is_verified),
         },
       })
     })
