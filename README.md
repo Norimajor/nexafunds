@@ -165,6 +165,9 @@ Before enabling the streaming features:
    `STREAMING_PUBLIC_URL` to the deployed frontend origin, `STRIPE_SECRET_KEY`,
    and `STRIPE_WEBHOOK_SECRET`. In Stripe, subscribe the HTTPS endpoint
    `/api/streaming/stripe/webhook` to `checkout.session.completed`.
+   Streaming write actions accept that public origin and any additional exact
+   frontend origins listed in the comma-separated `CORS_ORIGINS` setting. Keep
+   this list limited to trusted app origins; do not include paths or wildcards.
 
 The existing account login flow does not enforce email verification. The
 streaming-admin check therefore requires both a matching email and the numeric

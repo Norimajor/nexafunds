@@ -49,6 +49,26 @@ const getStorageConfig = () => {
 const isLiveKitConfigured = () =>
   Boolean(process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET)
 
+export const getStreamingAllowedOrigins = ({
+  streamingPublicUrl = process.env.STREAMING_PUBLIC_URL,
+  corsOrigins = process.env.CORS_ORIGINS,
+} = {}) => {
+  const origins = (corsOrigins || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+
+  if (streamingPublicUrl) {
+    try {
+      origins.push(new URL(streamingPublicUrl).origin)
+    } catch {
+      // Invalid public URLs are excluded; other configured origins remain available.
+    }
+  }
+
+  return [...new Set(origins)]
+}
+
 const hmac = (key, value, encoding) =>
   createHmac('sha256', key).update(value).digest(encoding)
 
@@ -183,20 +203,21 @@ export const createStreamingRouter = ({
       return
     }
 
-    let appOrigin
-    try {
-      appOrigin = process.env.STREAMING_PUBLIC_URL
-        ? new URL(process.env.STREAMING_PUBLIC_URL).origin
-        : null
-    } catch {
-      appOrigin = null
-    }
-    if (!appOrigin) {
-      sendHttpError(res, 503, 'Set STREAMING_PUBLIC_URL before enabling streaming actions.')
+    const appOrigins = getStreamingAllowedOrigins()
+    if (appOrigins.length === 0) {
+      sendHttpError(
+        res,
+        503,
+        'Set STREAMING_PUBLIC_URL or CORS_ORIGINS before enabling streaming actions.'
+      )
       return
     }
-    if (req.get('origin') !== appOrigin) {
-      sendHttpError(res, 403, 'Streaming actions must come from the configured NexaFunds app origin.')
+    if (!appOrigins.includes(req.get('origin'))) {
+      sendHttpError(
+        res,
+        403,
+        'Streaming actions must come from STREAMING_PUBLIC_URL or an origin listed in CORS_ORIGINS.'
+      )
       return
     }
     next()

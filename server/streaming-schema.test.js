@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import sqlite3 from 'sqlite3'
-import { COIN_BUNDLES, GIFTS } from './routes/streaming.js'
+import { COIN_BUNDLES, getStreamingAllowedOrigins, GIFTS } from './routes/streaming.js'
 import { createStreamingSchema } from './streaming-schema.js'
 
 const executeSqlite = (database, sql) =>
@@ -117,4 +117,25 @@ test('prices the requested KSh coin bundles in KES minor units', () => {
     ]
   )
   assert.deepEqual(Object.values(GIFTS).map((gift) => gift.coins), [5, 10, 50, 100])
+})
+
+test('resolves the primary streaming URL and additional CORS origins', () => {
+  assert.deepEqual(
+    getStreamingAllowedOrigins({
+      streamingPublicUrl: 'https://nexafunds.example/streaming/',
+      corsOrigins: ' https://preview.nexafunds.example,https://partner.example ',
+    }),
+    [
+      'https://preview.nexafunds.example',
+      'https://partner.example',
+      'https://nexafunds.example',
+    ]
+  )
+  assert.deepEqual(
+    getStreamingAllowedOrigins({
+      streamingPublicUrl: 'not-a-url',
+      corsOrigins: '',
+    }),
+    []
+  )
 })
