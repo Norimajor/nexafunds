@@ -147,6 +147,11 @@ checkout offers fixed KSh bundles (10/50/100/500 coins for KSh10/KSh50/KSh100/
 KSh500) and trading gifts cost 5/10/50/100 coins. Signed webhook events credit
 the server-side coin wallet. Creator gift earnings are tracked in coins only;
 cash conversion, payouts, and ads are deliberately not enabled in this release.
+Live viewers join with subscribe-only access; only the owner can invite a creator
+to cohost, and the invitee must accept before publishing. Viewers can double-tap
+the live stage to add a like, while profile follower/following counts open the
+corresponding creator lists. Creators can set the username shown to viewers in
+their profile editor; configured streaming admins can award or remove gold ticks.
 
 Before enabling the streaming features:
 

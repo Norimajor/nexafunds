@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import sqlite3 from 'sqlite3'
-import { COIN_BUNDLES, getStreamingAllowedOrigins, GIFTS } from './routes/streaming.js'
+import {
+  COIN_BUNDLES,
+  createLiveKitRoomToken,
+  getStreamingAllowedOrigins,
+  GIFTS,
+} from './routes/streaming.js'
 import { createStreamingSchema } from './streaming-schema.js'
 
 const executeSqlite = (database, sql) =>
@@ -70,6 +75,32 @@ test('creates streaming tables in SQLite and enforces follow/gift constraints', 
     )
     await executeSqlite(
       database,
+      `INSERT INTO creator_live_cohosts
+         (live_session_id, user_id, invited_by, invited_at, accepted_at)
+       VALUES ('live-one', 1, 2, CURRENT_TIMESTAMP, NULL)`
+    )
+    await executeSqlite(
+      database,
+      `INSERT INTO creator_live_likes (live_session_id, user_id, likes, updated_at)
+       VALUES ('live-one', 1, 1, CURRENT_TIMESTAMP)
+       ON CONFLICT (live_session_id, user_id)
+       DO UPDATE SET likes = creator_live_likes.likes + 1`
+    )
+    await executeSqlite(
+      database,
+      `INSERT INTO creator_live_likes (live_session_id, user_id, likes, updated_at)
+       VALUES ('live-one', 1, 1, CURRENT_TIMESTAMP)
+       ON CONFLICT (live_session_id, user_id)
+       DO UPDATE SET likes = creator_live_likes.likes + 1`
+    )
+    const liveLikes = await getSqlite(
+      database,
+      'SELECT SUM(likes) AS likes FROM creator_live_likes WHERE live_session_id = ?',
+      ['live-one']
+    )
+    assert.equal(liveLikes.likes, 2)
+    await executeSqlite(
+      database,
       `INSERT INTO creator_gifts
          (id, sender_id, recipient_id, gift_id, amount_coins, live_session_id, created_at)
        VALUES ('gift-one', 1, 2, 'bull_run', 100, 'live-one', CURRENT_TIMESTAMP)`
@@ -100,6 +131,8 @@ test('uses the persistent PostgreSQL user ID type in every streaming relation', 
   assert.ok(statements.some((sql) => sql.includes('user_id BIGINT PRIMARY KEY REFERENCES users(id)')))
   assert.ok(statements.some((sql) => sql.includes('follower_id BIGINT NOT NULL REFERENCES users(id)')))
   assert.ok(statements.some((sql) => sql.includes('host_user_id BIGINT NOT NULL REFERENCES users(id)')))
+  assert.ok(statements.some((sql) => sql.includes('user_id BIGINT NOT NULL REFERENCES users(id)')))
+  assert.ok(statements.some((sql) => sql.includes('invited_by BIGINT NOT NULL REFERENCES users(id)')))
 })
 
 test('prices the requested KSh coin bundles in KES minor units', () => {
@@ -138,4 +171,45 @@ test('resolves the primary streaming URL and additional CORS origins', () => {
     }),
     []
   )
+})
+
+test('LiveKit viewer tokens can subscribe but cannot publish media or data', () => {
+  const token = createLiveKitRoomToken({
+    roomName: 'nexa-test-room',
+    user: { id: 12 },
+    displayName: 'Viewer (@viewer)',
+    canPublish: false,
+    apiKey: 'test-api-key',
+    apiSecret: 'test-api-secret',
+    issuedAt: 1000,
+  })
+  const [header, claims] = token.split('.')
+  const decoded = JSON.parse(Buffer.from(claims, 'base64url').toString())
+
+  assert.deepEqual(JSON.parse(Buffer.from(header, 'base64url').toString()), {
+    alg: 'HS256',
+    typ: 'JWT',
+  })
+  assert.equal(decoded.video.roomJoin, true)
+  assert.equal(decoded.video.canSubscribe, true)
+  assert.equal(decoded.video.canPublish, false)
+  assert.equal(decoded.video.canPublishData, false)
+  assert.equal(decoded.name, 'Viewer (@viewer)')
+
+  const ownerClaims = JSON.parse(
+    Buffer.from(
+      createLiveKitRoomToken({
+        roomName: 'nexa-test-room',
+        user: { id: 7 },
+        displayName: 'Owner (@owner)',
+        canPublish: true,
+        apiKey: 'test-api-key',
+        apiSecret: 'test-api-secret',
+        issuedAt: 1000,
+      }).split('.')[1],
+      'base64url'
+    ).toString()
+  )
+  assert.equal(ownerClaims.video.canPublish, true)
+  assert.equal(ownerClaims.video.canPublishData, true)
 })

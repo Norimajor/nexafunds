@@ -49,6 +49,21 @@ export const createStreamingSchema = async ({ execute, userIdType }) => {
      ON creator_live_sessions(status, started_at)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS creator_live_sessions_one_live_per_host
      ON creator_live_sessions(host_user_id) WHERE status = 'live'`,
+    `CREATE TABLE IF NOT EXISTS creator_live_cohosts (
+      live_session_id TEXT NOT NULL REFERENCES creator_live_sessions(id) ON DELETE CASCADE,
+      user_id ${userIdType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      invited_by ${userIdType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      invited_at TEXT NOT NULL,
+      accepted_at TEXT,
+      PRIMARY KEY (live_session_id, user_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS creator_live_likes (
+      live_session_id TEXT NOT NULL REFERENCES creator_live_sessions(id) ON DELETE CASCADE,
+      user_id ${userIdType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      likes INTEGER NOT NULL DEFAULT 0 CHECK (likes >= 0),
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (live_session_id, user_id)
+    )`,
     `CREATE TABLE IF NOT EXISTS creator_comments (
       id TEXT PRIMARY KEY,
       post_id TEXT REFERENCES creator_posts(id) ON DELETE CASCADE,

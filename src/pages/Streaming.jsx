@@ -129,6 +129,13 @@ export default function Streaming() {
   const [giftTarget, setGiftTarget] = useState(null)
   const [adminProfiles, setAdminProfiles] = useState([])
   const [adminOpen, setAdminOpen] = useState(false)
+  const [connectionsPanel, setConnectionsPanel] = useState(null)
+  const [connections, setConnections] = useState([])
+  const [connectionsLoading, setConnectionsLoading] = useState(false)
+  const [liveLikes, setLiveLikes] = useState(0)
+  const [cohostInviteNotice, setCohostInviteNotice] = useState('')
+  const [hasCohostInvitation, setHasCohostInvitation] = useState(false)
+  const [cohostBusy, setCohostBusy] = useState(false)
   const postFormRef = useRef(null)
   const closingStreamRef = useRef(false)
 
@@ -209,6 +216,27 @@ export default function Streaming() {
     return () => window.clearInterval(timer)
   }, [activeStream, commentTarget])
 
+  useEffect(() => {
+    if (!activeStream) return undefined
+
+    const refreshLiveState = async () => {
+      try {
+        const likesData = await api(`/live/${activeStream.id}/likes`)
+        setLiveLikes(Number(likesData.likes || 0))
+        if (!activeStream.isHost && !activeStream.isCohost) {
+          const invitationData = await api(`/live/${activeStream.id}/cohost-invitation`)
+          setHasCohostInvitation(Boolean(invitationData.invited))
+        }
+      } catch (requestError) {
+        setError(requestError.message)
+      }
+    }
+
+    void refreshLiveState()
+    const timer = window.setInterval(() => void refreshLiveState(), 5000)
+    return () => window.clearInterval(timer)
+  }, [activeStream])
+
   const isOwnProfile = !username || profile?.username === username
   const displayedProfile = isOwnProfile ? profile : viewProfile
 
@@ -223,9 +251,17 @@ export default function Streaming() {
     setError('')
     try {
       const result = await api(`/profiles/${encodeURIComponent(handle)}/follow`, { method: 'POST' })
+      setConnections((current) =>
+        current.map((creator) =>
+          creator.username === handle
+            ? { ...creator, is_following: result.following }
+            : creator
+        )
+      )
       setNotice(result.following ? `Following @${handle}.` : `Unfollowed @${handle}.`)
       if (username) await loadCreator(username)
       await Promise.all([
+        loadProfile(),
         loadFeed({ preservePosts: Boolean(username) }),
         loadCreators(creatorSearch.trim()),
       ])
@@ -340,7 +376,11 @@ export default function Streaming() {
         livekitUrl: data.livekit_url,
         token: data.token,
         isHost: true,
+        isCohost: false,
       })
+      setLiveLikes(Number(data.stream.likes || 0))
+      setCohostInviteNotice('')
+      setHasCohostInvitation(false)
       closingStreamRef.current = false
       setCommentTarget({ live_session_id: data.stream.id })
       await loadFeed()
@@ -359,7 +399,11 @@ export default function Streaming() {
         livekitUrl: data.livekit_url,
         token: data.token,
         isHost: data.is_host,
+        isCohost: data.is_cohost,
       })
+      setLiveLikes(Number(data.stream.likes || 0))
+      setCohostInviteNotice('')
+      setHasCohostInvitation(false)
       closingStreamRef.current = false
       setCommentTarget({ live_session_id: stream.id })
     } catch (requestError) {
@@ -379,7 +423,79 @@ export default function Streaming() {
     }
     setActiveStream(null)
     setCommentTarget(null)
+    setHasCohostInvitation(false)
+    setCohostInviteNotice('')
     await loadFeed().catch((requestError) => setError(requestError.message))
+  }
+
+  const inviteCohost = async (cohostUsername) => {
+    if (!activeStream?.isHost) return
+    setCohostBusy(true)
+    setError('')
+    try {
+      const result = await api(`/live/${activeStream.id}/cohosts`, {
+        method: 'POST',
+        body: JSON.stringify({ username: cohostUsername }),
+      })
+      setCohostInviteNotice(`Invitation sent to @${result.invitee.username}.`)
+      setNotice(`@${result.invitee.username} was invited to cohost.`)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setCohostBusy(false)
+    }
+  }
+
+  const acceptCohostInvite = async () => {
+    if (!activeStream || !hasCohostInvitation) return
+    setCohostBusy(true)
+    setError('')
+    try {
+      const data = await api(`/live/${activeStream.id}/cohost-accept`, { method: 'POST' })
+      setActiveStream((current) => ({
+        ...current,
+        ...data.stream,
+        livekitUrl: data.livekit_url,
+        token: data.token,
+        isCohost: true,
+      }))
+      setLiveLikes(Number(data.stream.likes || 0))
+      setHasCohostInvitation(false)
+      setNotice('You joined as a cohost. Your camera and microphone are now enabled.')
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setCohostBusy(false)
+    }
+  }
+
+  const doubleTapLiveLike = async () => {
+    if (!activeStream) return
+    try {
+      const data = await api(`/live/${activeStream.id}/likes`, { method: 'POST' })
+      setLiveLikes(Number(data.likes || 0))
+    } catch (requestError) {
+      setError(requestError.message)
+    }
+  }
+
+  const showConnections = async (type) => {
+    if (!displayedProfile) return
+    setConnectionsPanel({ type, username: displayedProfile.username })
+    setConnections([])
+    setConnectionsLoading(true)
+    setError('')
+    try {
+      const data = await api(
+        `/profiles/${encodeURIComponent(displayedProfile.username)}/connections/${type}`
+      )
+      setConnections(data.connections || [])
+    } catch (requestError) {
+      setConnectionsPanel(null)
+      setError(requestError.message)
+    } finally {
+      setConnectionsLoading(false)
+    }
   }
 
   const searchCreators = async (event) => {
@@ -532,8 +648,12 @@ export default function Streaming() {
                       <p className="text-sm text-[#a8b0a9]">@{displayedProfile.username}</p>
                       {displayedProfile.bio && <p className="mt-2 max-w-2xl text-sm text-[#d1d5cc]">{displayedProfile.bio}</p>}
                       <div className="mt-3 flex gap-4 text-xs text-[#a8b0a9]">
-                        <span><strong className="text-[#f3f1e9]">{Number(displayedProfile.followers || 0).toLocaleString()}</strong> followers</span>
-                        <span><strong className="text-[#f3f1e9]">{Number(displayedProfile.following || 0).toLocaleString()}</strong> following</span>
+                        <button type="button" onClick={() => void showConnections('followers')} className="hover:text-[#eac16e]">
+                          <strong className="text-[#f3f1e9]">{Number(displayedProfile.followers || 0).toLocaleString()}</strong> followers
+                        </button>
+                        <button type="button" onClick={() => void showConnections('following')} className="hover:text-[#eac16e]">
+                          <strong className="text-[#f3f1e9]">{Number(displayedProfile.following || 0).toLocaleString()}</strong> following
+                        </button>
                         {isOwnProfile && <span><strong className="text-[#eac16e]">{Number(wallet.gift_earnings_coins || 0).toLocaleString()}</strong> gift coins earned</span>}
                       </div>
                     </div>
@@ -546,7 +666,7 @@ export default function Streaming() {
                           onClick={() => setProfileEditorOpen((open) => !open)}
                           className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm hover:bg-white/[0.06]"
                         >
-                          <Settings2 size={16} /> Edit profile
+                          <Settings2 size={16} /> Set username & profile
                         </button>
                         {profile.is_admin && (
                           <button
@@ -573,7 +693,8 @@ export default function Streaming() {
                 {profileEditorOpen && isOwnProfile && (
                   <form onSubmit={saveProfile} className="mt-5 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-2">
                     <label className="text-xs text-[#a8b0a9]">
-                      Username
+                      Viewer-facing username
+                      <span className="mt-1 block text-[11px]">Viewers see this on your profile, videos, and live streams.</span>
                       <input
                         required
                         minLength={3}
@@ -612,12 +733,56 @@ export default function Streaming() {
               </section>
             )}
 
+            {connectionsPanel && (
+              <section className="rounded-3xl border border-[#eac16e]/20 bg-[#111a17] p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-semibold">
+                      @{connectionsPanel.username} {connectionsPanel.type}
+                    </h2>
+                    <p className="text-xs text-[#a8b0a9]">Select a creator to view their profile.</p>
+                  </div>
+                  <button type="button" onClick={() => setConnectionsPanel(null)} aria-label="Close connections list">
+                    <X size={18} />
+                  </button>
+                </div>
+                {connectionsLoading ? (
+                  <p className="text-sm text-[#a8b0a9]">Loading {connectionsPanel.type}…</p>
+                ) : connections.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {connections.map((creator) => (
+                      <div key={creator.user_id} className="flex items-center justify-between gap-3 rounded-xl bg-[#0b1512] p-3">
+                        <button type="button" onClick={() => openCreator(creator.username)} className="min-w-0 text-left">
+                          <span className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                            {creator.display_name}
+                            {creator.is_verified && <VerifiedBadge />}
+                          </span>
+                          <span className="block truncate text-xs text-[#a8b0a9]">@{creator.username}</span>
+                        </button>
+                        {profile.username !== creator.username && (
+                          <button
+                            type="button"
+                            onClick={() => void followCreator(creator.username)}
+                            className="shrink-0 rounded-lg border border-[#eac16e]/20 px-2.5 py-1.5 text-xs text-[#eac16e]"
+                          >
+                            {creator.is_following ? 'Following' : 'Follow'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#a8b0a9]">No {connectionsPanel.type} yet.</p>
+                )}
+              </section>
+            )}
+
             {adminOpen && profile.is_admin && (
               <section className="rounded-3xl border border-[#eac16e]/20 bg-[#111a17] p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="font-semibold">Creator verification</h2>
-                    <p className="text-xs text-[#a8b0a9]">Verified creators receive the NexaFunds gold badge.</p>
+                    <h2 className="font-semibold">Golden tick verification</h2>
+                    <p className="text-xs text-[#a8b0a9]">Approve or remove the NexaFunds golden tick on creator profiles.</p>
                   </div>
                   <button type="button" onClick={() => setAdminOpen(false)} aria-label="Close verification panel">
                     <X size={18} />
@@ -674,6 +839,9 @@ export default function Streaming() {
                             <p className="line-clamp-2 text-sm font-semibold">{stream.title}</p>
                             <span className="mt-2 flex items-center gap-1 text-xs text-[#a8b0a9]">
                               {stream.display_name} {stream.is_verified && <VerifiedBadge />}
+                            </span>
+                            <span className="mt-2 flex items-center gap-1 text-xs text-rose-300">
+                              <Heart size={13} fill="currentColor" /> {Number(stream.likes || 0).toLocaleString()} likes
                             </span>
                           </button>
                         ))}
@@ -973,6 +1141,12 @@ export default function Streaming() {
           <LiveRoom
             stream={activeStream}
             onClose={() => void closeLive()}
+            likes={liveLikes}
+            onDoubleTapLike={() => void doubleTapLiveLike()}
+            onInviteCohost={(cohostUsername) => void inviteCohost(cohostUsername)}
+            cohostInvitation={activeStream.isHost ? cohostInviteNotice : hasCohostInvitation}
+            onAcceptCohost={() => void acceptCohostInvite()}
+            invitationBusy={cohostBusy}
           >
             <div className="min-h-0 flex-1 overflow-y-auto">
               <CommentList

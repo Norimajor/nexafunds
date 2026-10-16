@@ -72,6 +72,35 @@ export const getStreamingAllowedOrigins = ({
 const hmac = (key, value, encoding) =>
   createHmac('sha256', key).update(value).digest(encoding)
 
+export const createLiveKitRoomToken = ({
+  roomName,
+  user,
+  displayName,
+  canPublish,
+  apiKey,
+  apiSecret,
+  issuedAt = Math.floor(Date.now() / 1000),
+}) => {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
+  const claims = Buffer.from(JSON.stringify({
+    iss: apiKey,
+    sub: String(user.id),
+    name: displayName,
+    nbf: issuedAt - 5,
+    iat: issuedAt,
+    exp: issuedAt + 3600,
+    video: {
+      roomJoin: true,
+      room: roomName,
+      canPublish,
+      canSubscribe: true,
+      canPublishData: canPublish,
+    },
+  })).toString('base64url')
+  const unsignedToken = `${header}.${claims}`
+  return `${unsignedToken}.${hmac(apiSecret, unsignedToken, 'base64url')}`
+}
+
 const hasValidStripeSignature = (payload, signatureHeader, secret) => {
   const parts = String(signatureHeader || '').split(',').map((part) => part.split('=', 2))
   const timestamp = parts.find(([key]) => key === 't')?.[1]
@@ -281,26 +310,24 @@ export const createStreamingRouter = ({
     return true
   }
 
+  const getLiveLikeCount = async (liveSessionId) => {
+    const result = await get(
+      db,
+      'SELECT COALESCE(SUM(likes), 0) AS likes FROM creator_live_likes WHERE live_session_id = ?',
+      [liveSessionId]
+    )
+    return Number(result?.likes || 0)
+  }
+
   const issueRoomToken = async (roomName, user, displayName, canPublish) => {
-    const issuedAt = Math.floor(Date.now() / 1000)
-    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
-    const claims = Buffer.from(JSON.stringify({
-      iss: process.env.LIVEKIT_API_KEY,
-      sub: String(user.id),
-      name: displayName,
-      nbf: issuedAt - 5,
-      iat: issuedAt,
-      exp: issuedAt + 3600,
-      video: {
-        roomJoin: true,
-        room: roomName,
-        canPublish,
-        canSubscribe: true,
-        canPublishData: true,
-      },
-    })).toString('base64url')
-    const unsignedToken = `${header}.${claims}`
-    return `${unsignedToken}.${hmac(process.env.LIVEKIT_API_SECRET, unsignedToken, 'base64url')}`
+    return createLiveKitRoomToken({
+      roomName,
+      user,
+      displayName,
+      canPublish,
+      apiKey: process.env.LIVEKIT_API_KEY,
+      apiSecret: process.env.LIVEKIT_API_SECRET,
+    })
   }
 
   const getCommentList = async (query, values) => {
@@ -424,6 +451,45 @@ export const createStreamingRouter = ({
           following: counts.following,
           isFollowing: Boolean(followed),
         }),
+      })
+    })
+  )
+
+  router.get(
+    '/profiles/:username/connections/:connectionType',
+    requireAuth,
+    asyncRoute(async (req, res) => {
+      const { username, connectionType } = req.params
+      if (!['followers', 'following'].includes(connectionType)) {
+        return sendHttpError(res, 400, 'Choose followers or following.')
+      }
+      const profile = await get(
+        db,
+        'SELECT user_id FROM creator_profiles WHERE LOWER(username) = LOWER(?)',
+        [username]
+      )
+      if (!profile) return sendHttpError(res, 404, 'Creator profile not found.')
+      const direction = connectionType === 'followers' ? 'f.followed_id' : 'f.follower_id'
+      const related = connectionType === 'followers' ? 'f.follower_id' : 'f.followed_id'
+      const connections = await all(
+        db,
+        `SELECT p.user_id, p.username, p.display_name, p.is_verified,
+                (SELECT COUNT(*) FROM creator_follows mine
+                 WHERE mine.follower_id = ? AND mine.followed_id = p.user_id) AS is_following
+         FROM creator_follows f
+         JOIN creator_profiles p ON p.user_id = ${related}
+         WHERE ${direction} = ?
+         ORDER BY f.created_at DESC
+         LIMIT 100`,
+        [req.session.user.id, profile.user_id]
+      )
+      res.json({
+        success: true,
+        connections: connections.map((connection) => ({
+          ...connection,
+          is_verified: Boolean(connection.is_verified),
+          is_following: Boolean(connection.is_following),
+        })),
       })
     })
   )
@@ -564,7 +630,9 @@ export const createStreamingRouter = ({
       const live = await all(
         db,
         `SELECT s.id, s.host_user_id, s.title, s.started_at,
-                p.username, p.display_name, p.is_verified
+                p.username, p.display_name, p.is_verified,
+                (SELECT COALESCE(SUM(l.likes), 0) FROM creator_live_likes l
+                 WHERE l.live_session_id = s.id) AS likes
          FROM creator_live_sessions s
          JOIN creator_profiles p ON p.user_id = s.host_user_id
          WHERE s.status = 'live'
@@ -586,6 +654,7 @@ export const createStreamingRouter = ({
         ),
         live: live.map((stream) => ({
           ...stream,
+          likes: Number(stream.likes || 0),
           is_verified: Boolean(stream.is_verified),
         })),
         media_configured: Boolean(storage),
@@ -771,9 +840,15 @@ export const createStreamingRouter = ({
           started_at: startedAt,
           username: profile.username,
           display_name: profile.display_name,
+          likes: 0,
         },
         livekit_url: process.env.LIVEKIT_URL,
-        token: await issueRoomToken(roomName, req.session.user, profile.display_name, true),
+        token: await issueRoomToken(
+          roomName,
+          req.session.user,
+          `${profile.display_name} (@${profile.username})`,
+          true
+        ),
       })
     })
   )
@@ -787,7 +862,7 @@ export const createStreamingRouter = ({
       }
       const stream = await get(
         db,
-        `SELECT s.id, s.host_user_id, s.room_name, s.title, p.display_name
+        `SELECT s.id, s.host_user_id, s.room_name, s.title, p.display_name, p.username
          FROM creator_live_sessions s
          JOIN creator_profiles p ON p.user_id = s.host_user_id
          WHERE s.id = ? AND s.status = 'live'`,
@@ -795,18 +870,194 @@ export const createStreamingRouter = ({
       )
       if (!stream) return sendHttpError(res, 404, 'This live session has ended.')
       const isHost = String(stream.host_user_id) === String(req.session.user.id)
+      const cohost = isHost ? null : await get(
+        db,
+        `SELECT accepted_at FROM creator_live_cohosts
+         WHERE live_session_id = ? AND user_id = ?`,
+        [stream.id, req.session.user.id]
+      )
+      const isCohost = Boolean(cohost?.accepted_at)
+      const viewerProfile = isHost
+        ? { username: stream.username, display_name: stream.display_name }
+        : await ensureOwnProfile(req.session.user)
+      const participantName = `${viewerProfile.display_name} (@${viewerProfile.username})`
       res.json({
         success: true,
-        stream: { id: stream.id, title: stream.title, display_name: stream.display_name },
+        stream: {
+          id: stream.id,
+          title: stream.title,
+          display_name: stream.display_name,
+          username: stream.username,
+          likes: await getLiveLikeCount(stream.id),
+        },
         livekit_url: process.env.LIVEKIT_URL,
         token: await issueRoomToken(
           stream.room_name,
           req.session.user,
-          isHost ? stream.display_name : `${req.session.user.first_name} ${req.session.user.last_name}`.trim(),
-          isHost
+          participantName,
+          isHost || isCohost
         ),
         is_host: isHost,
+        is_cohost: isCohost,
       })
+    })
+  )
+
+  router.post(
+    '/live/:streamId/cohosts',
+    requireAuth,
+    asyncRoute(async (req, res) => {
+      const stream = await get(
+        db,
+        `SELECT id, host_user_id FROM creator_live_sessions
+         WHERE id = ? AND status = 'live'`,
+        [req.params.streamId]
+      )
+      if (!stream) return sendHttpError(res, 404, 'This live session has ended.')
+      if (String(stream.host_user_id) !== String(req.session.user.id)) {
+        return sendHttpError(res, 403, 'Only the stream owner can invite a cohost.')
+      }
+      const username = String(req.body?.username || '').trim()
+      const invitee = await get(
+        db,
+        'SELECT user_id, username, display_name FROM creator_profiles WHERE LOWER(username) = LOWER(?)',
+        [username]
+      )
+      if (!invitee) return sendHttpError(res, 404, 'Creator profile not found.')
+      if (String(invitee.user_id) === String(req.session.user.id)) {
+        return sendHttpError(res, 400, 'You are already the owner of this stream.')
+      }
+      const existing = await get(
+        db,
+        `SELECT accepted_at FROM creator_live_cohosts
+         WHERE live_session_id = ? AND user_id = ?`,
+        [stream.id, invitee.user_id]
+      )
+      if (existing) {
+        return sendHttpError(
+          res,
+          409,
+          existing.accepted_at ? 'This creator is already a cohost.' : 'This creator has already been invited.'
+        )
+      }
+      await run(
+        db,
+        `INSERT INTO creator_live_cohosts
+           (live_session_id, user_id, invited_by, invited_at, accepted_at)
+         VALUES (?, ?, ?, ?, NULL)`,
+        [stream.id, invitee.user_id, req.session.user.id, now()]
+      )
+      res.status(201).json({
+        success: true,
+        invitee: { username: invitee.username, display_name: invitee.display_name },
+      })
+    })
+  )
+
+  router.get(
+    '/live/:streamId/cohost-invitation',
+    requireAuth,
+    asyncRoute(async (req, res) => {
+      const stream = await get(
+        db,
+        `SELECT id FROM creator_live_sessions
+         WHERE id = ? AND status = 'live'`,
+        [req.params.streamId]
+      )
+      if (!stream) return sendHttpError(res, 404, 'This live session has ended.')
+      const invite = await get(
+        db,
+        `SELECT accepted_at FROM creator_live_cohosts
+         WHERE live_session_id = ? AND user_id = ?`,
+        [stream.id, req.session.user.id]
+      )
+      res.json({
+        success: true,
+        invited: Boolean(invite),
+        accepted: Boolean(invite?.accepted_at),
+      })
+    })
+  )
+
+  router.post(
+    '/live/:streamId/cohost-accept',
+    requireAuth,
+    asyncRoute(async (req, res) => {
+      if (!isLiveKitConfigured()) {
+        return sendHttpError(res, 503, 'LiveKit is not configured on the server.')
+      }
+      const stream = await get(
+        db,
+        `SELECT s.id, s.room_name, s.title, p.username, p.display_name
+         FROM creator_live_sessions s
+         JOIN creator_profiles p ON p.user_id = s.host_user_id
+         JOIN creator_live_cohosts c ON c.live_session_id = s.id
+         WHERE s.id = ? AND c.user_id = ? AND s.status = 'live'`,
+        [req.params.streamId, req.session.user.id]
+      )
+      if (!stream) return sendHttpError(res, 403, 'You do not have an active cohost invitation.')
+      const acceptedAt = now()
+      await run(
+        db,
+        `UPDATE creator_live_cohosts SET accepted_at = ?
+         WHERE live_session_id = ? AND user_id = ?`,
+        [acceptedAt, stream.id, req.session.user.id]
+      )
+      const profile = await ensureOwnProfile(req.session.user)
+      res.json({
+        success: true,
+        is_cohost: true,
+        stream: {
+          id: stream.id,
+          title: stream.title,
+          display_name: stream.display_name,
+          username: stream.username,
+          likes: await getLiveLikeCount(stream.id),
+        },
+        livekit_url: process.env.LIVEKIT_URL,
+        token: await issueRoomToken(
+          stream.room_name,
+          req.session.user,
+          `${profile.display_name} (@${profile.username})`,
+          true
+        ),
+      })
+    })
+  )
+
+  router.get(
+    '/live/:streamId/likes',
+    requireAuth,
+    asyncRoute(async (req, res) => {
+      const stream = await get(
+        db,
+        `SELECT id FROM creator_live_sessions WHERE id = ? AND status = 'live'`,
+        [req.params.streamId]
+      )
+      if (!stream) return sendHttpError(res, 404, 'This live session has ended.')
+      res.json({ success: true, likes: await getLiveLikeCount(stream.id) })
+    })
+  )
+
+  router.post(
+    '/live/:streamId/likes',
+    requireAuth,
+    asyncRoute(async (req, res) => {
+      const stream = await get(
+        db,
+        `SELECT id FROM creator_live_sessions WHERE id = ? AND status = 'live'`,
+        [req.params.streamId]
+      )
+      if (!stream) return sendHttpError(res, 404, 'This live session has ended.')
+      await run(
+        db,
+        `INSERT INTO creator_live_likes (live_session_id, user_id, likes, updated_at)
+         VALUES (?, ?, 1, ?)
+         ON CONFLICT (live_session_id, user_id)
+         DO UPDATE SET likes = creator_live_likes.likes + 1, updated_at = excluded.updated_at`,
+        [stream.id, req.session.user.id, now()]
+      )
+      res.json({ success: true, likes: await getLiveLikeCount(stream.id) })
     })
   )
 
