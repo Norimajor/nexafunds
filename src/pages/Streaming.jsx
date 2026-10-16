@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   BadgeCheck,
   Coins,
@@ -79,11 +79,11 @@ function CommentList({ comments, draft, setDraft, onSubmit, busy, compact = fals
           comments.map((comment) => (
             <div key={comment.id} className="flex items-start gap-2.5 text-sm">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#d7a83f] to-[#436b62] text-[10px] font-bold text-[#111]">
-                {(comment.display_name || comment.username || 'C').slice(0, 1).toUpperCase()}
+                (comment.username || 'C').slice(0, 1).toUpperCase()
               </span>
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1 text-xs font-semibold text-white/85">
-                  <span className="truncate">{comment.display_name || comment.username}</span>
+                  <span className="truncate">{comment.username || 'creator'}</span>
                   {comment.is_verified && <VerifiedBadge className="h-3.5 w-3.5" />}
                 </p>
                 <p className="mt-0.5 break-words text-sm text-[#d1d5cc]">{comment.body}</p>
@@ -117,6 +117,8 @@ function CommentList({ comments, draft, setDraft, onSubmit, busy, compact = fals
 export default function Streaming() {
   const navigate = useNavigate()
   const { username } = useParams()
+  const [searchParams] = useSearchParams()
+  const sharedLiveId = searchParams.get('live')
   const [profile, setProfile] = useState(null)
   const [viewProfile, setViewProfile] = useState(null)
   const [wallet, setWallet] = useState({ balance_coins: 0, gift_earnings_coins: 0 })
@@ -155,6 +157,7 @@ export default function Streaming() {
   const [liveFollowBusy, setLiveFollowBusy] = useState(false)
   const postFormRef = useRef(null)
   const closingStreamRef = useRef(false)
+  const sharedLiveAttemptRef = useRef('')
   const profileLoaded = Boolean(profile)
   const profileVerified = Boolean(profile?.is_verified)
 
@@ -206,7 +209,7 @@ export default function Streaming() {
     try {
       await loadProfile()
       await Promise.all([
-        username ? loadCreator(username) : loadFeed(),
+        username ? Promise.all([loadCreator(username), loadFeed()]) : loadFeed(),
         loadCreators(),
       ])
     } catch (requestError) {
@@ -457,7 +460,7 @@ export default function Streaming() {
     }
   }
 
-  const joinLive = async (stream) => {
+  const joinLive = useCallback(async (stream) => {
     setError('')
     try {
       const data = await api(`/live/${stream.id}/token`, { method: 'POST' })
@@ -496,7 +499,19 @@ export default function Streaming() {
     } catch (requestError) {
       setError(requestError.message)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (loading || !sharedLiveId || activeStream || sharedLiveAttemptRef.current === sharedLiveId) return
+
+    const stream = live.find((entry) => String(entry.id) === sharedLiveId)
+    sharedLiveAttemptRef.current = sharedLiveId
+    if (!stream) {
+      setError('This shared live stream is no longer available.')
+      return
+    }
+    void joinLive(stream)
+  }, [activeStream, joinLive, live, loading, sharedLiveId])
 
   const followLiveCreator = async () => {
     if (!activeStream?.username || activeStream.isHost) return

@@ -8,17 +8,20 @@ import {
   RoomAudioRenderer,
   TrackToggle,
   useParticipantInfo,
+  useParticipants,
   useTracks,
   VideoTrack,
 } from '@livekit/components-react'
 import '@livekit/components-styles'
 import {
   ArrowUpRight,
+  Eye,
   Heart,
   MessageCircle,
   Mic,
   MonitorUp,
   Radio,
+  Share2,
   Users,
   Video,
   X,
@@ -86,6 +89,9 @@ function LiveParticipantTile() {
 }
 
 function LiveStage({ publisher }) {
+  const audienceCount = useParticipants().filter(
+    (participant) => participant.permissions?.canPublish === false
+  ).length
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: false },
@@ -100,6 +106,9 @@ function LiveStage({ publisher }) {
         <LiveParticipantTile />
       </GridLayout>
       <RoomAudioRenderer />
+      <div className="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/65 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+        <Eye size={14} /> {audienceCount.toLocaleString()}
+      </div>
       {publisher && (
         <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/10 bg-black/70 p-2 shadow-xl backdrop-blur">
           <TrackToggle
@@ -152,6 +161,7 @@ export default function StreamingLiveRoom({
   const currentTokenRef = useRef(stream.token)
   const [candleCount, setCandleCount] = useState(0)
   const [cohostUsername, setCohostUsername] = useState('')
+  const [shareNotice, setShareNotice] = useState('')
   const isPublisher = stream.isHost || stream.isCohost
   currentTokenRef.current = stream.token
 
@@ -177,6 +187,26 @@ export default function StreamingLiveRoom({
     setCohostUsername('')
   }
 
+  const shareLive = async () => {
+    const shareUrl = new URL('/streaming', window.location.origin)
+    shareUrl.searchParams.set('live', stream.id)
+    const shareData = { title: `${stream.username} is live on NexaFunds`, url: shareUrl.toString() }
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData)
+        setShareNotice('Live link shared.')
+      } else {
+        await navigator.clipboard.writeText(shareData.url)
+        setShareNotice('Live link copied. Share it with your viewers.')
+      }
+    } catch (shareError) {
+      if (shareError.name !== 'AbortError') {
+        setShareNotice('Could not share the live link. Please try again.')
+      }
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#050606]/95 p-2 text-white sm:p-4">
       <style>{`
@@ -195,7 +225,7 @@ export default function StreamingLiveRoom({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="max-w-[22rem] truncate text-sm font-bold sm:text-base">
-                {stream.display_name || stream.username || 'NexaFunds creator'}
+                {stream.username || 'Creator'}
               </h1>
               {stream.is_verified && <CreatorVerificationBadge />}
               <span className="rounded-lg bg-rose-600 px-2.5 py-1 text-[10px] font-extrabold tracking-wide">LIVE</span>
@@ -203,17 +233,14 @@ export default function StreamingLiveRoom({
                 <Users size={13} /> {Number(stream.followers || 0).toLocaleString()} followers
               </span>
             </div>
-            <p className="truncate text-xs text-white/50">
-              {stream.username || stream.title}
-              {stream.username && stream.title ? ` · ${stream.title}` : ''}
-            </p>
+            <p className="truncate text-xs text-white/50">{stream.title || 'Live trading session'}</p>
           </div>
-          {!stream.isHost && stream.username && (
+          {!stream.isHost && Boolean(stream.username) && (
             <button
               type="button"
               onClick={onFollow}
               disabled={followingBusy}
-              className={`hidden rounded-xl border px-5 py-2 text-sm font-semibold transition disabled:opacity-50 sm:inline-flex ${
+              className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-50 sm:px-5 sm:text-sm ${
                 stream.is_following
                   ? 'border-white/15 text-white/70 hover:bg-white/10'
                   : 'border-[#eac16e] text-[#eac16e] hover:bg-[#eac16e]/10'
@@ -224,6 +251,15 @@ export default function StreamingLiveRoom({
           )}
           <button
             type="button"
+            onClick={() => void shareLive()}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white/85 transition hover:border-[#eac16e]/60 hover:text-[#eac16e] sm:px-4 sm:text-sm"
+            aria-label="Share live stream link"
+          >
+            <Share2 size={15} />
+            <span className="hidden sm:inline">Share</span>
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             className="rounded-xl p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
             aria-label="Leave live stream"
@@ -231,6 +267,11 @@ export default function StreamingLiveRoom({
             <X size={22} />
           </button>
         </header>
+        {shareNotice && (
+          <p role="status" className="border-b border-[#eac16e]/20 bg-[#eac16e]/10 px-5 py-2 text-center text-xs text-[#f1d48e]">
+            {shareNotice}
+          </p>
+        )}
 
         <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(260px,42%)] lg:grid-cols-[minmax(0,1fr)_350px] lg:grid-rows-1">
           <main className="flex min-h-0 flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
