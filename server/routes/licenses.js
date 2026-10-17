@@ -743,5 +743,46 @@ export const createLicenseRouter = ({
     })
   )
 
+  router.delete(
+    '/admin/licenses/:licenseId',
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      const license = await get(
+        db,
+        'SELECT id, status, account_login FROM ea_licenses WHERE id = ?',
+        [req.params.licenseId]
+      )
+      if (!license) {
+        return res.status(404).json({ success: false, error: 'Account request not found.' })
+      }
+      if (!['active', 'rejected'].includes(license.status)) {
+        return res.status(409).json({
+          success: false,
+          error: 'Only reviewed account requests can be removed.',
+        })
+      }
+
+      const removed = await transaction(db, async (execute) => {
+        const deleted = await execute(
+          'DELETE FROM ea_licenses WHERE id = ? AND status IN (?, ?)',
+          [req.params.licenseId, 'active', 'rejected']
+        )
+        return Boolean(deleted.changes)
+      })
+      if (!removed) {
+        return res.status(409).json({
+          success: false,
+          error: 'This account request changed while it was being removed. Refresh and try again.',
+        })
+      }
+
+      res.json({
+        success: true,
+        account_login: license.account_login,
+        keys_revoked: license.status === 'active',
+      })
+    })
+  )
+
   return router
 }

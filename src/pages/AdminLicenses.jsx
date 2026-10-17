@@ -180,6 +180,34 @@ export default function AdminLicenses() {
     }
   }
 
+  const handleRemoveLicense = async (license) => {
+    const action = license.status === 'active'
+      ? `Remove approved MT5 account ${license.account_login} and permanently revoke its EA keys?`
+      : `Remove rejected account request for MT5 account ${license.account_login}?`
+    if (!window.confirm(`${action} This cannot be undone.`)) return
+
+    setError('')
+    setBusyId(license.id)
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/admin/licenses/${encodeURIComponent(license.id)}`,
+        {
+          method: 'DELETE',
+          headers: { 'x-admin-key': adminKey },
+        }
+      )
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Unable to remove the account request.')
+      }
+      setLicenses((current) => current.filter((entry) => entry.id !== license.id))
+    } catch (removeError) {
+      setError(removeError.message || 'Unable to remove the account request.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const handleCreatorVerificationDecision = async (requestId, decision) => {
     setError('')
     setBusyId(requestId)
@@ -319,7 +347,7 @@ export default function AdminLicenses() {
           <section className="nf-panel nf-admin-queue">
             <div className="nf-panel-heading">
               <span className="nf-step-number">02</span>
-              <div><h2>MT5 account requests</h2><p>Verify that each submitted account is registered under the NexaFunds IB.</p></div>
+              <div><h2>MT5 account requests</h2><p>Verify that each submitted account is registered under the NexaFunds IB. Remove reviewed requests to keep this list manageable.</p></div>
               <button className="nf-quiet-button" onClick={() => { setAuthenticated(false); if (!rememberAdminKey) setAdminKey(''); setLicenses([]) }}>Lock queue</button>
             </div>
             {licenses.length === 0 ? <p className="nf-empty-state">No account requests yet.</p> : (
@@ -365,6 +393,22 @@ export default function AdminLicenses() {
                       <div className="nf-admin-actions">
                         <button className="nf-primary" type="button" disabled={busyId === license.id || !signingConfigured || !license.broker_server?.trim()} onClick={() => handleDecision(license.id, 'approve')}>{busyId === license.id ? 'Updating…' : 'Verify & approve'}</button>
                         <button className="nf-secondary" type="button" disabled={busyId === license.id} onClick={() => handleDecision(license.id, 'reject')}>Reject request</button>
+                      </div>
+                    )}
+                    {license.status !== 'pending' && (
+                      <div className="nf-admin-actions">
+                        <button
+                          className="nf-ea-delete-button"
+                          type="button"
+                          disabled={busyId === license.id}
+                          onClick={() => handleRemoveLicense(license)}
+                        >
+                          {busyId === license.id
+                            ? 'Removing…'
+                            : license.status === 'active'
+                              ? 'Remove account & revoke keys'
+                              : 'Remove rejected request'}
+                        </button>
                       </div>
                     )}
                   </article>
