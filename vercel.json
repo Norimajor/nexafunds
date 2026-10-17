@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/licenses/validate",
+      "destination": "https://nexafunds-app.onrender.com/api/licenses/validate"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
