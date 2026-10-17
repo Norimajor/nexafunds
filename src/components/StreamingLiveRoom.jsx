@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ConnectionQualityIndicator,
   GridLayout,
@@ -27,12 +27,19 @@ import {
   Radio,
   Share2,
   Square,
-  Users,
   Video,
   X,
   UserPlus,
 } from 'lucide-react'
-import { ConnectionState, Track } from 'livekit-client'
+import { ConnectionState, Track, VideoPresets } from 'livekit-client'
+
+const LIVE_ROOM_OPTIONS = {
+  adaptiveStream: true,
+  dynacast: true,
+  videoCaptureDefaults: {
+    resolution: VideoPresets.h540.resolution,
+  },
+}
 
 function CreatorVerificationBadge() {
   return (
@@ -94,7 +101,7 @@ function LiveParticipantTile() {
   )
 }
 
-function LiveStage({ publisher, controlsOpen, onDeviceError }) {
+const LiveStage = memo(function LiveStage({ publisher, controlsOpen, onDeviceError }) {
   const audienceCount = useParticipants().filter(
     (participant) => participant.permissions?.canPublish === false
   ).length
@@ -180,7 +187,7 @@ function LiveStage({ publisher, controlsOpen, onDeviceError }) {
       )}
     </div>
   )
-}
+})
 
 export default function StreamingLiveRoom({
   stream,
@@ -257,9 +264,9 @@ export default function StreamingLiveRoom({
     handleLikeTap()
   }
 
-  const handleDeviceError = (error) => {
+  const handleDeviceError = useCallback((error) => {
     setStreamError(error.message || 'Unable to access the selected media device. Check browser permissions and try again.')
-  }
+  }, [])
 
   const inviteCohost = (event) => {
     event.preventDefault()
@@ -405,6 +412,23 @@ export default function StreamingLiveRoom({
               <MoreHorizontal size={20} />
             </button>
           )}
+          {stream.isHost && (
+            <button
+              type="button"
+              onClick={() => setShowInvite((visible) => !visible)}
+              aria-label={showInvite ? 'Close cohost invitation' : 'Add a cohost'}
+              aria-expanded={showInvite}
+              title="Add a cohost"
+              className={`flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border px-2.5 text-white shadow-lg backdrop-blur transition sm:px-3 ${
+                showInvite
+                  ? 'border-[#eac16e]/70 bg-[#eac16e]/20 text-[#f1d48e]'
+                  : 'border-white/15 bg-black/45 hover:bg-black/70'
+              }`}
+            >
+              <UserPlus size={17} />
+              <span className="hidden text-xs font-semibold sm:inline">Cohost</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void shareLive()}
@@ -448,6 +472,7 @@ export default function StreamingLiveRoom({
                 connect
                 audio={isPublisher}
                 video={isPublisher}
+                options={LIVE_ROOM_OPTIONS}
                 onDisconnected={() => {
                   if (currentTokenRef.current === stream.token) onClose()
                 }}
@@ -546,18 +571,6 @@ export default function StreamingLiveRoom({
                   {stream.is_following ? <Check size={16} /> : <UserPlus size={16} />}
                 </span>
                 <span className="text-[9px] font-semibold">{followingBusy ? '…' : stream.is_following ? 'Followed' : 'Follow'}</span>
-              </button>
-            )}
-            {stream.isHost && (
-              <button
-                type="button"
-                onClick={() => setShowInvite((visible) => !visible)}
-                aria-label="Invite a cohost"
-                aria-expanded={showInvite}
-                title="Invite a cohost"
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-black/35 text-white drop-shadow-lg transition active:scale-90 sm:h-14 sm:w-14"
-              >
-                <Users size={23} />
               </button>
             )}
           </div>

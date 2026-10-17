@@ -265,20 +265,32 @@ export default function Streaming() {
   }, [loadCreator, loadCreators, loadFeed, loadProfile, username])
 
   useEffect(() => {
+    if (activeStream) return undefined
     void refresh()
     const timer = window.setInterval(() => {
       void loadFeed({ preservePosts: Boolean(username) })
         .catch((requestError) => setError(requestError.message))
     }, 10000)
     return () => window.clearInterval(timer)
-  }, [loadFeed, refresh, username])
+  }, [activeStream, loadFeed, refresh, username])
 
   useEffect(() => {
     if (!activeStream || !commentTarget?.live_session_id) return undefined
     const loadLiveComments = async () => {
       try {
         const data = await api(`/live/${activeStream.id}/comments`)
-        setCommentLists((current) => ({ ...current, [`live:${activeStream.id}`]: data.comments || [] }))
+        const key = `live:${activeStream.id}`
+        const comments = data.comments || []
+        setCommentLists((current) => {
+          const previous = current[key] || []
+          const unchanged = previous.length === comments.length
+            && previous.every((comment, index) => (
+              comment.id === comments[index].id
+              && comment.body === comments[index].body
+              && comment.created_at === comments[index].created_at
+            ))
+          return unchanged ? current : { ...current, [key]: comments }
+        })
       } catch (requestError) {
         if (requestError.status === 404) {
           returnFromEndedLive(activeStream.id)
@@ -287,9 +299,17 @@ export default function Streaming() {
         setError(requestError.message)
       }
     }
-    void loadLiveComments()
-    const timer = window.setInterval(loadLiveComments, 4000)
-    return () => window.clearInterval(timer)
+    let timer
+    let cancelled = false
+    const pollLiveComments = async () => {
+      await loadLiveComments()
+      if (!cancelled) timer = window.setTimeout(pollLiveComments, 4000)
+    }
+    void pollLiveComments()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [activeStream, commentTarget, returnFromEndedLive])
 
   useEffect(() => {
@@ -298,10 +318,12 @@ export default function Streaming() {
     const refreshLiveState = async () => {
       try {
         const likesData = await api(`/live/${activeStream.id}/likes`)
-        setLiveLikes(Number(likesData.likes || 0))
+        const nextLikes = Number(likesData.likes || 0)
+        setLiveLikes((current) => current === nextLikes ? current : nextLikes)
         if (!activeStream.isHost && !activeStream.isCohost) {
           const invitationData = await api(`/live/${activeStream.id}/cohost-invitation`)
-          setHasCohostInvitation(Boolean(invitationData.invited))
+          const invited = Boolean(invitationData.invited)
+          setHasCohostInvitation((current) => current === invited ? current : invited)
         }
       } catch (requestError) {
         if (requestError.status === 404) {
@@ -312,13 +334,21 @@ export default function Streaming() {
       }
     }
 
-    void refreshLiveState()
-    const timer = window.setInterval(() => void refreshLiveState(), 5000)
-    return () => window.clearInterval(timer)
+    let timer
+    let cancelled = false
+    const pollLiveState = async () => {
+      await refreshLiveState()
+      if (!cancelled) timer = window.setTimeout(pollLiveState, 5000)
+    }
+    void pollLiveState()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [activeStream, returnFromEndedLive])
 
   useEffect(() => {
-    if (!profileLoaded || profileVerified) return undefined
+    if (!profileLoaded || profileVerified || activeStream) return undefined
 
     const refreshVerificationStatus = async () => {
       try {
@@ -338,7 +368,7 @@ export default function Streaming() {
 
     const timer = window.setInterval(() => void refreshVerificationStatus(), 15000)
     return () => window.clearInterval(timer)
-  }, [profileLoaded, profileVerified])
+  }, [activeStream, profileLoaded, profileVerified])
 
   const isOwnProfile = !username || profile?.username === username
   const displayedProfile = isOwnProfile ? profile : viewProfile
