@@ -294,14 +294,25 @@ export const createLicenseRouter = ({
       if (!isValidProductId(productId)) {
         return res.status(401).json({ success: false, valid: false })
       }
-      const signedClaims = verifyLicenseKey(licenseKey, {
-        accountLogin,
-        accountType,
-        brokerServer,
-        productId,
-      })
+      const signedClaims = verifyLicenseKey(licenseKey)
       if (!signedClaims) {
-        console.warn('[license-validation] rejected: signed_claims_mismatch')
+        console.warn('[license-validation] rejected: invalid_or_malformed_key')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (signedClaims.account_login !== accountLogin) {
+        console.warn('[license-validation] rejected: signed_account_mismatch')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (signedClaims.account_type !== accountType) {
+        console.warn('[license-validation] rejected: signed_account_type_mismatch')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (signedClaims.broker_server.toLowerCase() !== brokerServer.toLowerCase()) {
+        console.warn('[license-validation] rejected: signed_broker_server_mismatch')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (signedClaims.product_id !== productId) {
+        console.warn('[license-validation] rejected: signed_product_mismatch')
         return res.status(401).json({ success: false, valid: false })
       }
       const license = await get(
