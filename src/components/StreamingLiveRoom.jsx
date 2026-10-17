@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ConnectionQualityIndicator,
   GridLayout,
@@ -9,24 +9,30 @@ import {
   TrackToggle,
   useParticipantInfo,
   useParticipants,
+  useConnectionState,
   useTracks,
   VideoTrack,
 } from '@livekit/components-react'
 import '@livekit/components-styles'
 import {
   ArrowUpRight,
+  Check,
   Eye,
+  Gift,
   Heart,
   MessageCircle,
   Mic,
   MonitorUp,
+  MoreHorizontal,
   Radio,
   Share2,
+  Square,
   Users,
   Video,
   X,
+  UserPlus,
 } from 'lucide-react'
-import { Track } from 'livekit-client'
+import { ConnectionState, Track } from 'livekit-client'
 
 function CreatorVerificationBadge() {
   return (
@@ -88,10 +94,12 @@ function LiveParticipantTile() {
   )
 }
 
-function LiveStage({ publisher }) {
+function LiveStage({ publisher, controlsOpen, onDeviceError }) {
   const audienceCount = useParticipants().filter(
     (participant) => participant.permissions?.canPublish === false
   ).length
+  const connectionState = useConnectionState()
+  const screenShareSupported = Boolean(navigator.mediaDevices?.getDisplayMedia)
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: false },
@@ -101,22 +109,49 @@ function LiveStage({ publisher }) {
   )
 
   return (
-    <div className="lk-video-conference h-full min-h-0">
-      <GridLayout tracks={tracks}>
-        <LiveParticipantTile />
-      </GridLayout>
+    <div className={`lk-video-conference absolute inset-0 h-full min-h-0 ${publisher && tracks.length === 2 ? 'live-room-cohost-stage' : ''}`}>
+      {tracks.length > 0 ? (
+        <GridLayout tracks={tracks}>
+          <LiveParticipantTile />
+        </GridLayout>
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#080a09] px-8 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#eac16e]/30 bg-[#eac16e]/10 text-[#eac16e]">
+            <Radio size={26} />
+          </div>
+          <p className="text-sm font-semibold text-white">Waiting for video</p>
+          <p className="max-w-xs text-xs leading-relaxed text-white/60">
+            {connectionState !== ConnectionState.Connected
+              ? 'Connecting to the live stream…'
+              : publisher
+                ? 'Your live connection is active. Turn on your camera or share your screen to appear.'
+                : 'The live connection is active. Video will appear when the creator starts a camera or screen share.'}
+          </p>
+        </div>
+      )}
       <RoomAudioRenderer />
-      <div className="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/65 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+      <div className="absolute right-3 top-[max(5.25rem,calc(env(safe-area-inset-top)+4rem))] z-20 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-3 py-1.5 text-xs font-semibold text-white shadow-lg backdrop-blur-md sm:right-5">
         <Eye size={14} /> {audienceCount.toLocaleString()}
       </div>
-      {publisher && (
-        <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/10 bg-black/70 p-2 shadow-xl backdrop-blur">
+      <div className="absolute left-3 top-[max(5.25rem,calc(env(safe-area-inset-top)+4rem))] z-20 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-2.5 py-1.5 text-[10px] font-semibold text-white/90 shadow-lg backdrop-blur-md sm:left-5">
+        <span className={`live-room-motion h-1.5 w-1.5 rounded-full ${connectionState === ConnectionState.Connected ? 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,.8)]' : connectionState === ConnectionState.Reconnecting ? 'animate-pulse bg-amber-300' : 'animate-pulse bg-white/60'}`} />
+        {connectionState === ConnectionState.Connected
+          ? 'LIVE'
+          : connectionState === ConnectionState.Reconnecting
+            ? 'Reconnecting'
+            : connectionState === ConnectionState.Disconnected
+              ? 'Disconnected'
+              : 'Connecting'}
+      </div>
+      {publisher && controlsOpen && (
+        <div data-live-overlay className="absolute right-3 top-[max(8.75rem,calc(env(safe-area-inset-top)+7.5rem))] z-40 flex items-center gap-2 rounded-2xl border border-white/15 bg-black/65 p-2 shadow-xl backdrop-blur-xl sm:right-5">
           <TrackToggle
             source={Track.Source.Microphone}
             showIcon={false}
             aria-label="Toggle microphone"
             title="Toggle microphone"
-            className="rounded-xl border border-white/10 bg-white/10 p-3 text-white hover:bg-white/20"
+            onDeviceError={onDeviceError}
+            className="live-control-toggle min-h-11 min-w-11 rounded-xl border border-white/15 bg-white/10 p-3 text-white transition hover:bg-white/20 data-[lk-enabled=true]:border-emerald-300/60 data-[lk-enabled=true]:bg-emerald-400/15 data-[lk-enabled=false]:border-rose-400/60 data-[lk-enabled=false]:bg-rose-500/20 data-[lk-enabled=false]:text-rose-200"
           >
             <Mic size={18} />
           </TrackToggle>
@@ -125,16 +160,19 @@ function LiveStage({ publisher }) {
             showIcon={false}
             aria-label="Toggle camera"
             title="Toggle camera"
-            className="rounded-xl border border-white/10 bg-white/10 p-3 text-white hover:bg-white/20"
+            onDeviceError={onDeviceError}
+            className="live-control-toggle min-h-11 min-w-11 rounded-xl border border-white/15 bg-white/10 p-3 text-white transition hover:bg-white/20 data-[lk-enabled=true]:border-emerald-300/60 data-[lk-enabled=true]:bg-emerald-400/15 data-[lk-enabled=false]:border-rose-400/60 data-[lk-enabled=false]:bg-rose-500/20 data-[lk-enabled=false]:text-rose-200"
           >
             <Video size={18} />
           </TrackToggle>
           <TrackToggle
             source={Track.Source.ScreenShare}
             showIcon={false}
-            aria-label="Share screen"
-            title="Share screen"
-            className="rounded-xl border border-[#eac16e]/40 bg-[#eac16e] p-3 text-[#15110a] hover:bg-[#f3d28c]"
+            aria-label="Toggle screen sharing"
+            title={screenShareSupported ? 'Toggle screen sharing' : 'Screen sharing is not supported by this browser'}
+            disabled={!screenShareSupported}
+            onDeviceError={onDeviceError}
+            className="live-control-toggle live-screen-toggle min-h-11 min-w-11 rounded-xl border border-[#eac16e]/40 bg-[#eac16e]/15 p-3 text-[#f1d48e] transition hover:bg-[#eac16e]/25 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <MonitorUp size={18} />
           </TrackToggle>
@@ -147,12 +185,20 @@ function LiveStage({ publisher }) {
 export default function StreamingLiveRoom({
   stream,
   onClose,
-  children,
+  chatContent,
+  giftContent,
+  giftFeedback,
+  errorMessage,
   likes,
+  commentsCount,
+  onFocusComposer,
   onDoubleTapLike,
   onInviteCohost,
   cohostInvitation,
   onAcceptCohost,
+  onDismissError,
+  onEndLive,
+  endingLive,
   invitationBusy,
   onFollow,
   followingBusy,
@@ -162,8 +208,40 @@ export default function StreamingLiveRoom({
   const [candleCount, setCandleCount] = useState(0)
   const [cohostUsername, setCohostUsername] = useState('')
   const [shareNotice, setShareNotice] = useState('')
+  const [streamError, setStreamError] = useState('')
+  const [viewport, setViewport] = useState(null)
+  const [showControls, setShowControls] = useState(false)
+  const [showGifts, setShowGifts] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
   const isPublisher = stream.isHost || stream.isCohost
   currentTokenRef.current = stream.token
+
+  useEffect(() => {
+    const visualViewport = window.visualViewport
+    if (!visualViewport) return undefined
+
+    const updateViewport = () => {
+      const nextViewport = {
+        height: visualViewport.height,
+        offsetTop: visualViewport.offsetTop,
+      }
+      setViewport((current) => (
+        current?.height === nextViewport.height && current?.offsetTop === nextViewport.offsetTop
+          ? current
+          : nextViewport
+      ))
+    }
+
+    updateViewport()
+    visualViewport.addEventListener('resize', updateViewport)
+    visualViewport.addEventListener('scroll', updateViewport)
+    window.addEventListener('resize', updateViewport)
+    return () => {
+      visualViewport.removeEventListener('resize', updateViewport)
+      visualViewport.removeEventListener('scroll', updateViewport)
+      window.removeEventListener('resize', updateViewport)
+    }
+  }, [])
 
   const handleLikeTap = () => {
     const tappedAt = Date.now()
@@ -175,8 +253,12 @@ export default function StreamingLiveRoom({
   }
 
   const handleStageTap = (event) => {
-    if (event.target.closest('button, input, textarea, select, [role="button"]')) return
+    if (event.target.closest('button, input, textarea, select, [role="button"], [data-live-overlay]')) return
     handleLikeTap()
+  }
+
+  const handleDeviceError = (error) => {
+    setStreamError(error.message || 'Unable to access the selected media device. Check browser permissions and try again.')
   }
 
   const inviteCohost = (event) => {
@@ -208,7 +290,13 @@ export default function StreamingLiveRoom({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#050606]/95 p-2 text-white sm:p-4">
+    <div
+      className="fixed inset-x-0 z-[70] overflow-hidden bg-black text-white"
+      style={{
+        top: viewport ? `${viewport.offsetTop}px` : 0,
+        height: viewport ? `${viewport.height}px` : '100dvh',
+      }}
+    >
       <style>{`
         @keyframes bull-candle-rise {
           0% { opacity: 0; transform: translateY(18px) scale(.7); }
@@ -216,66 +304,143 @@ export default function StreamingLiveRoom({
           78% { opacity: 1; transform: translateY(-54px) scale(1); }
           100% { opacity: 0; transform: translateY(-76px) scale(.92); }
         }
+        .live-room-stage .lk-grid-layout {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+        }
+        .live-room-stage .lk-video-conference {
+          position: absolute;
+          inset: 0;
+        }
+        .live-room-stage .lk-participant-tile {
+          min-width: 0;
+          min-height: 0;
+          flex: 1;
+          border-radius: 0;
+        }
+        .live-room-cohost-stage .lk-grid-layout {
+          display: block;
+        }
+        .live-room-cohost-stage .lk-participant-tile:first-child {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+        }
+        .live-room-cohost-stage .lk-participant-tile:nth-child(2) {
+          position: absolute;
+          right: max(1rem, env(safe-area-inset-right));
+          bottom: max(7rem, calc(env(safe-area-inset-bottom) + 6rem));
+          z-index: 10;
+          width: clamp(5.5rem, 24vw, 8rem);
+          height: clamp(8rem, 34vw, 11rem);
+          overflow: hidden;
+          border: 2px solid rgba(255, 255, 255, .85);
+          border-radius: 1rem;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, .55);
+        }
+        .live-room-cohost-stage .lk-participant-tile:nth-child(2) .lk-participant-metadata {
+          padding: .35rem;
+        }
+        .live-room-cohost-stage .lk-participant-tile:nth-child(2) .lk-participant-metadata-item {
+          display: none;
+        }
+        .live-room-stage .lk-participant-media-video[data-lk-source="camera"] {
+          object-fit: cover;
+          background: #000;
+        }
+        .live-room-stage .lk-participant-media-video[data-lk-source="screen_share"] {
+          object-fit: contain;
+          background: #000;
+        }
+        .live-control-toggle[data-lk-enabled="true"] {
+          border-color: rgba(91, 209, 167, .65);
+          background: rgba(91, 209, 167, .17);
+          color: #b9f1dd;
+        }
+        .live-control-toggle[data-lk-enabled="false"] {
+          border-color: rgba(251, 113, 133, .5);
+          background: rgba(244, 63, 94, .17);
+          color: #fecdd3;
+        }
+        .live-screen-toggle[data-lk-enabled="true"] {
+          border-color: rgba(234, 193, 110, .75);
+          background: rgba(234, 193, 110, .2);
+          color: #f1d48e;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .live-room-motion, .animate-pulse { animation: none !important; transition: none !important; }
+        }
       `}</style>
-      <div className="flex h-[min(96vh,1000px)] w-full max-w-[1600px] flex-col overflow-hidden rounded-[26px] border border-[#d7a83f]/30 bg-[#0b0b0c] shadow-[0_24px_100px_rgba(0,0,0,.75)]">
-        <header className="flex min-h-[76px] items-center gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eac16e]/55 bg-[#15120b] text-sm font-black italic text-[#eac16e]">
+      <div className="relative h-full w-full overflow-hidden bg-black">
+        <header data-live-overlay className="absolute inset-x-0 top-0 z-30 flex items-center gap-2 bg-gradient-to-b from-black/80 via-black/35 to-transparent px-3 pb-5 pt-[max(.75rem,env(safe-area-inset-top))] sm:gap-3 sm:px-5 sm:pb-7">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#eac16e]/60 bg-black/45 text-sm font-black italic text-[#eac16e] shadow-lg sm:h-11 sm:w-11">
             N
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="max-w-[22rem] truncate text-sm font-bold sm:text-base">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h1 className="max-w-[11rem] truncate text-sm font-bold drop-shadow sm:max-w-xs sm:text-base">
                 {stream.username || 'Creator'}
               </h1>
               {stream.is_verified && <CreatorVerificationBadge />}
-              <span className="rounded-lg bg-rose-600 px-2.5 py-1 text-[10px] font-extrabold tracking-wide">LIVE</span>
-              <span className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/80">
-                <Users size={13} /> {Number(stream.followers || 0).toLocaleString()} followers
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rose-500/90 px-2 py-1 text-[9px] font-extrabold tracking-wide shadow-lg">
+                <span className="live-room-motion h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> LIVE
               </span>
             </div>
-            <p className="truncate text-xs text-white/50">{stream.title || 'Live trading session'}</p>
+            <p className="mt-0.5 truncate text-[11px] text-white/80 drop-shadow">
+              {stream.title || 'Live trading session'} · {Number(stream.followers || 0).toLocaleString()} followers
+            </p>
           </div>
-          {!stream.isHost && Boolean(stream.username) && (
+          {isPublisher && (
             <button
               type="button"
-              onClick={onFollow}
-              disabled={followingBusy}
-              className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-50 sm:px-5 sm:text-sm ${
-                stream.is_following
-                  ? 'border-white/15 text-white/70 hover:bg-white/10'
-                  : 'border-[#eac16e] text-[#eac16e] hover:bg-[#eac16e]/10'
-              }`}
+              onClick={() => setShowControls((visible) => !visible)}
+              aria-label={showControls ? 'Hide streaming controls' : 'Show streaming controls'}
+              aria-expanded={showControls}
+              title={showControls ? 'Hide controls' : 'Show controls'}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg backdrop-blur transition hover:bg-black/70"
             >
-              {followingBusy ? 'Updating…' : stream.is_following ? 'Following' : 'Follow'}
+              <MoreHorizontal size={20} />
             </button>
           )}
           <button
             type="button"
             onClick={() => void shareLive()}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white/85 transition hover:border-[#eac16e]/60 hover:text-[#eac16e] sm:px-4 sm:text-sm"
-            aria-label="Share live stream link"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg backdrop-blur transition hover:bg-black/70"
+            aria-label="Share live stream"
+            title="Share live stream"
           >
-            <Share2 size={15} />
-            <span className="hidden sm:inline">Share</span>
+            <Share2 size={17} />
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
-            aria-label="Leave live stream"
-          >
-            <X size={22} />
-          </button>
+          {stream.isHost ? (
+            <button
+              type="button"
+              onClick={onEndLive}
+              disabled={endingLive}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-rose-300/40 bg-rose-600/90 text-xs font-bold text-white shadow-lg backdrop-blur transition hover:bg-rose-500 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:px-4 sm:text-sm"
+              aria-label="End live stream"
+              title="End live stream for everyone"
+            >
+              <Square size={14} fill="currentColor" />
+              <span className="sr-only sm:not-sr-only">{endingLive ? 'Ending…' : 'End live'}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg backdrop-blur transition hover:bg-black/70"
+              aria-label="Leave live stream"
+              title="Leave live stream"
+            >
+              <X size={20} />
+            </button>
+          )}
         </header>
-        {shareNotice && (
-          <p role="status" className="border-b border-[#eac16e]/20 bg-[#eac16e]/10 px-5 py-2 text-center text-xs text-[#f1d48e]">
-            {shareNotice}
-          </p>
-        )}
-
-        <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(260px,42%)] lg:grid-cols-[minmax(0,1fr)_350px] lg:grid-rows-1">
-          <main className="flex min-h-0 flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
-            <div className="relative min-h-0 flex-1 overflow-hidden bg-black" onClick={handleStageTap}>
+        <div className="absolute inset-0">
+          <main className="absolute inset-0">
+            <div className="live-room-stage absolute inset-0 overflow-hidden bg-black" onClick={handleStageTap}>
               <LiveKitRoom
                 key={stream.token}
                 serverUrl={stream.livekitUrl}
@@ -286,52 +451,158 @@ export default function StreamingLiveRoom({
                 onDisconnected={() => {
                   if (currentTokenRef.current === stream.token) onClose()
                 }}
+                onError={(error) => setStreamError(error.message || 'The live connection could not be established.')}
+                onConnected={() => setStreamError('')}
+                onMediaDeviceFailure={(_failure, kind) => {
+                  setStreamError(`Unable to access ${kind || 'media'} device. Check browser permissions and try again.`)
+                }}
                 data-lk-theme="default"
                 style={{ height: '100%', width: '100%' }}
               >
-                <LiveStage publisher={isPublisher} />
+                <LiveStage
+                  publisher={isPublisher}
+                  controlsOpen={showControls}
+                  onDeviceError={handleDeviceError}
+                />
               </LiveKitRoom>
 
-              <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[75%] rounded-2xl border border-white/10 bg-black/65 px-4 py-3 backdrop-blur-sm">
-                <p className="text-sm font-semibold text-white">{stream.title || 'Live trading session'}</p>
-              </div>
-              <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-4">
-                {candleCount > 0 && (
-                  <div
-                    key={candleCount}
-                    className="pointer-events-none absolute -top-16 left-1/2 flex -translate-x-1/2 flex-col items-center text-emerald-300"
-                    style={{ animation: 'bull-candle-rise 1.15s ease-out forwards' }}
-                    aria-hidden="true"
-                  >
-                    <ArrowUpRight size={24} strokeWidth={3} />
-                    <span className="relative my-1 h-7 w-3 rounded-sm bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,.65)] before:absolute before:left-1/2 before:top-[-7px] before:h-11 before:w-px before:-translate-x-1/2 before:bg-emerald-300 after:absolute after:left-1/2 after:bottom-[-7px] after:h-11 after:w-px after:-translate-x-1/2 after:bg-emerald-300" />
-                  </div>
-                )}
+              {candleCount > 0 && (
+                <div
+                  key={candleCount}
+                  className="pointer-events-none absolute right-[4.75rem] top-1/2 z-20 flex -translate-y-1/2 flex-col items-center text-emerald-300 sm:right-24"
+                  style={{ animation: 'bull-candle-rise 1.15s ease-out forwards' }}
+                  aria-hidden="true"
+                >
+                  <ArrowUpRight size={24} strokeWidth={3} />
+                  <span className="relative my-1 h-7 w-3 rounded-sm bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,.65)] before:absolute before:left-1/2 before:top-[-7px] before:h-11 before:w-px before:-translate-x-1/2 before:bg-emerald-300 after:absolute after:left-1/2 after:bottom-[-7px] after:h-11 after:w-px after:-translate-x-1/2 after:bg-emerald-300" />
+                </div>
+              )}
+            </div>
+          </main>
+
+          {chatContent && (
+            <section
+              data-live-overlay
+              aria-label="Live chat"
+              className="absolute bottom-[max(.65rem,env(safe-area-inset-bottom))] left-3 z-20 flex h-[min(48dvh,30rem)] w-[calc(100%-5.5rem)] max-w-[32rem] flex-col justify-end sm:bottom-[max(1rem,env(safe-area-inset-bottom))] sm:left-5"
+            >
+              {chatContent}
+            </section>
+          )}
+
+          <div data-live-overlay className="absolute right-2 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-2.5 sm:right-5 sm:gap-4">
+            <button
+              type="button"
+              onClick={handleLikeTap}
+              aria-label={`Double tap to like. ${Number(likes || 0).toLocaleString()} live likes`}
+              className="flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-full bg-black/35 text-rose-300 drop-shadow-lg transition active:scale-90 sm:min-h-14 sm:min-w-14"
+            >
+              <Heart size={27} fill="currentColor" className="live-room-motion transition-transform active:scale-125" />
+              <span aria-live="polite" aria-atomic="true" className="text-[10px] font-bold text-white">
+                {Number(likes || 0).toLocaleString()}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={onFocusComposer}
+              aria-label={`Open live comments, ${Number(commentsCount || 0).toLocaleString()} loaded`}
+              title="Open comments"
+              className="flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-full bg-black/35 text-white drop-shadow-lg transition active:scale-90 sm:min-h-14 sm:min-w-14"
+            >
+              <MessageCircle size={25} />
+              <span className="text-[10px] font-semibold">{Number(commentsCount || 0).toLocaleString()}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void shareLive()}
+              aria-label="Share live stream"
+              title="Share live stream"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-black/35 text-white drop-shadow-lg transition active:scale-90 sm:h-14 sm:w-14"
+            >
+              <Share2 size={23} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowGifts((visible) => !visible)}
+              aria-label={showGifts ? 'Close gifts' : 'Send a gift'}
+              aria-expanded={showGifts}
+              title="Send a gift"
+              className="flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-full bg-black/35 text-[#eac16e] drop-shadow-lg transition active:scale-90 sm:min-h-14 sm:min-w-14"
+            >
+              <Gift size={24} />
+              <span className="text-[10px] font-semibold text-white">Gift</span>
+            </button>
+            {!stream.isHost && Boolean(stream.username) && (
+              <button
+                type="button"
+                onClick={onFollow}
+                disabled={followingBusy}
+                aria-label={stream.is_following ? `Following ${stream.username}` : `Follow ${stream.username}`}
+                className={`flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-full bg-black/35 drop-shadow-lg transition active:scale-90 disabled:opacity-60 sm:min-h-14 sm:min-w-14 ${
+                  stream.is_following ? 'text-[#eac16e]' : 'text-white'
+                }`}
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/35 bg-[#161713]/80">
+                  {stream.is_following ? <Check size={16} /> : <UserPlus size={16} />}
+                </span>
+                <span className="text-[9px] font-semibold">{followingBusy ? '…' : stream.is_following ? 'Followed' : 'Follow'}</span>
+              </button>
+            )}
+            {stream.isHost && (
+              <button
+                type="button"
+                onClick={() => setShowInvite((visible) => !visible)}
+                aria-label="Invite a cohost"
+                aria-expanded={showInvite}
+                title="Invite a cohost"
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-black/35 text-white drop-shadow-lg transition active:scale-90 sm:h-14 sm:w-14"
+              >
+                <Users size={23} />
+              </button>
+            )}
+          </div>
+
+          {showGifts && giftContent && (
+            <section data-live-overlay className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] right-[4.5rem] z-40 sm:right-24">
+              {giftContent}
+            </section>
+          )}
+
+          {(streamError || errorMessage || shareNotice || giftFeedback) && (
+            <div
+              data-live-overlay
+              role={streamError || errorMessage ? 'alert' : 'status'}
+              className={`absolute left-3 top-[max(7.5rem,calc(env(safe-area-inset-top)+6rem))] z-50 flex max-w-[calc(100%-5.5rem)] items-start gap-3 rounded-xl border px-3 py-2 text-xs shadow-xl backdrop-blur sm:left-5 ${
+                streamError || errorMessage
+                  ? 'border-rose-400/30 bg-black/75 text-rose-100'
+                  : 'border-[#eac16e]/25 bg-black/65 text-[#f1d48e]'
+              }`}
+            >
+              <span>{streamError || errorMessage || shareNotice || giftFeedback}</span>
+              {(streamError || errorMessage) && (
                 <button
                   type="button"
-                  onClick={handleLikeTap}
-                  className="flex min-w-[62px] flex-col items-center gap-1 rounded-2xl bg-black/55 px-3 py-2 text-rose-400 backdrop-blur transition hover:scale-105 hover:bg-black/75 active:scale-95"
-                  aria-label={`Double tap to like. ${Number(likes || 0).toLocaleString()} live likes`}
+                  onClick={() => {
+                    setStreamError('')
+                    onDismissError()
+                  }}
+                  className="shrink-0 rounded-full p-1 text-white/75 hover:bg-white/10"
+                  aria-label="Dismiss live stream error"
                 >
-                  <Heart size={28} fill="currentColor" />
-                  <span className="text-xs font-bold text-white">{Number(likes || 0).toLocaleString()}</span>
+                  <X size={14} />
                 </button>
-                <div className="flex min-w-[62px] flex-col items-center gap-1 rounded-2xl bg-black/55 px-3 py-2 text-white/90 backdrop-blur">
-                  <MessageCircle size={25} />
-                  <span className="text-[10px]">Chat</span>
-                </div>
-              </div>
-              <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-xl bg-black/45 px-3 py-2 text-xs text-white/75 backdrop-blur-sm">
-                {isPublisher
-                  ? stream.isHost ? 'You are live · only publishers appear on stage' : 'You are cohosting'
-                  : 'You are watching as a viewer'}
-              </div>
+              )}
             </div>
-            {stream.isHost && (
-              <form onSubmit={inviteCohost} className="flex shrink-0 items-center gap-2 border-t border-white/10 bg-[#101011] px-4 py-3">
-                <label htmlFor="live-cohost-username" className="hidden text-xs text-white/60 sm:block">
-                  Invite cohost
-                </label>
+          )}
+
+          {showInvite && stream.isHost && (
+            <form
+              data-live-overlay
+              onSubmit={inviteCohost}
+              className="absolute right-[4.5rem] top-[max(6rem,calc(env(safe-area-inset-top)+5rem))] z-40 flex w-[min(19rem,calc(100vw-6rem))] flex-col gap-2 rounded-2xl border border-white/15 bg-black/75 p-3 shadow-2xl backdrop-blur-xl sm:right-24"
+            >
+              <label htmlFor="live-cohost-username" className="text-xs font-semibold text-white/80">Invite a cohost</label>
+              <div className="flex gap-2">
                 <input
                   id="live-cohost-username"
                   value={cohostUsername}
@@ -340,43 +611,36 @@ export default function StreamingLiveRoom({
                   pattern="@?[a-zA-Z0-9_]{3,40}"
                   placeholder="@username"
                   required
-                  className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-[#eac16e]/60"
+                  className="min-h-11 min-w-0 flex-1 rounded-xl border border-white/15 bg-white/5 px-3 text-base text-white outline-none focus:border-[#eac16e]/60 sm:text-sm"
                 />
                 <button
                   type="submit"
                   disabled={invitationBusy}
-                  className="rounded-xl bg-[#eac16e] px-4 py-2 text-sm font-semibold text-[#15110a] disabled:opacity-50"
+                  className="min-h-11 rounded-xl bg-[#eac16e] px-3 text-sm font-semibold text-[#15110a] disabled:opacity-50"
                 >
-                  {invitationBusy ? 'Sending…' : 'Invite'}
-                </button>
-                {cohostInvitation && <span className="hidden text-xs text-emerald-300 xl:inline">{cohostInvitation}</span>}
-              </form>
-            )}
-            {!stream.isHost && cohostInvitation && !stream.isCohost && (
-              <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[#eac16e]/20 bg-[#eac16e]/10 px-4 py-3">
-                <p className="text-xs text-white">The stream owner invited you to cohost.</p>
-                <button
-                  type="button"
-                  onClick={onAcceptCohost}
-                  disabled={invitationBusy}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#eac16e] px-3 py-2 text-xs font-bold text-[#15110a] disabled:opacity-50"
-                >
-                  <Radio size={14} /> {invitationBusy ? 'Joining…' : 'Accept invite'}
+                  {invitationBusy ? '…' : 'Invite'}
                 </button>
               </div>
-            )}
-          </main>
+              {cohostInvitation && <p role="status" className="text-xs text-emerald-200">{cohostInvitation}</p>}
+            </form>
+          )}
 
-          <aside className="flex min-h-0 flex-col bg-[#0d0d0e]">
-            <div className="flex h-[62px] shrink-0 items-center border-b border-white/10 px-5">
-              <div className="flex h-full items-center border-b-2 border-[#eac16e] px-2 text-sm font-semibold">
-                Live chat
-              </div>
+          {!stream.isHost && cohostInvitation && !stream.isCohost && (
+            <div
+              data-live-overlay
+              className="absolute left-3 right-[4.5rem] top-[max(6rem,calc(env(safe-area-inset-top)+5rem))] z-40 flex items-center justify-between gap-2 rounded-2xl border border-[#eac16e]/25 bg-black/75 px-3 py-2 shadow-xl backdrop-blur-xl sm:left-5 sm:right-24"
+            >
+              <p className="text-xs text-white">The owner invited you to cohost.</p>
+              <button
+                type="button"
+                onClick={onAcceptCohost}
+                disabled={invitationBusy}
+                className="min-h-10 shrink-0 rounded-xl bg-[#eac16e] px-3 text-xs font-bold text-[#15110a] disabled:opacity-50"
+              >
+                {invitationBusy ? 'Joining…' : 'Accept'}
+              </button>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4">
-              {children}
-            </div>
-          </aside>
+          )}
         </div>
       </div>
     </div>

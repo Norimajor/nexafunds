@@ -33,7 +33,9 @@ async function api(path, options = {}) {
   })
   const data = await response.json().catch(() => ({}))
   if (!response.ok || data.success === false) {
-    throw new Error(data.error || 'The streaming service could not complete your request.')
+    const requestError = new Error(data.error || 'The streaming service could not complete your request.')
+    requestError.status = response.status
+    throw requestError
   }
   return data
 }
@@ -69,42 +71,70 @@ function CreatorName({ profile, onClick }) {
   )
 }
 
-function CommentList({ comments, draft, setDraft, onSubmit, busy, compact = false }) {
+function CommentList({ comments, draft, setDraft, onSubmit, busy, compact = false, composerRef }) {
+  const commentsRef = useRef(null)
+  const nearBottomRef = useRef(true)
+
+  useEffect(() => {
+    const commentsElement = commentsRef.current
+    if (nearBottomRef.current && commentsElement) {
+      commentsElement.scrollTop = commentsElement.scrollHeight
+    }
+  }, [comments])
+
   return (
-    <div className={`mt-4 flex min-h-0 flex-col border-t border-white/[0.07] pt-4 ${compact ? 'flex-1' : ''}`}>
-      <div className={`space-y-3 overflow-y-auto ${compact ? 'min-h-0 flex-1' : 'max-h-52'}`}>
+    <div className={`flex min-h-0 flex-col ${compact ? 'flex-1' : 'mt-4 border-t border-white/[0.07] pt-4'}`}>
+      <div
+        ref={commentsRef}
+        onScroll={(event) => {
+          const element = event.currentTarget
+          nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80
+        }}
+        aria-live={compact ? 'polite' : undefined}
+        aria-relevant={compact ? 'additions' : undefined}
+        className={`space-y-2 overflow-y-auto ${compact ? 'min-h-0 max-h-[38dvh] flex-1 [scrollbar-width:none]' : 'max-h-52 space-y-3'}`}
+      >
         {comments.length === 0 ? (
           <p className="text-sm text-[#a8b0a9]">Start the conversation.</p>
         ) : (
           comments.map((comment) => (
-            <div key={comment.id} className="flex items-start gap-2.5 text-sm">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#d7a83f] to-[#436b62] text-[10px] font-bold text-[#111]">
-                (comment.username || 'C').slice(0, 1).toUpperCase()
+            <div key={comment.id} className="flex items-start gap-2 text-sm">
+              <span className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#d7a83f] to-[#436b62] font-bold text-[#111] ${compact ? 'mt-0.5 h-6 w-6 text-[9px]' : 'h-8 w-8 text-[10px]'}`}>
+                {(comment.username || 'C').slice(0, 1).toUpperCase()}
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1 text-xs font-semibold text-white/85">
+              <div className="min-w-0 flex-1 drop-shadow-[0_1px_3px_rgba(0,0,0,.95)]">
+                <p className="flex items-center gap-1 text-xs font-semibold text-white">
                   <span className="truncate">{comment.username || 'creator'}</span>
                   {comment.is_verified && <VerifiedBadge className="h-3.5 w-3.5" />}
+                  {comment.created_at && !Number.isNaN(new Date(comment.created_at).getTime()) && (
+                    <time
+                      dateTime={comment.created_at}
+                      className="ml-auto shrink-0 text-[10px] font-normal text-white/65"
+                    >
+                      {new Date(comment.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    </time>
+                  )}
                 </p>
-                <p className="mt-0.5 break-words text-sm text-[#d1d5cc]">{comment.body}</p>
+                <p className={`mt-0.5 break-words text-sm text-white ${compact ? 'leading-5' : ''}`}>{comment.body}</p>
               </div>
             </div>
           ))
         )}
       </div>
-      <form onSubmit={onSubmit} className="mt-3 flex gap-2">
+      <form onSubmit={onSubmit} className={`mt-2 flex shrink-0 gap-2 ${compact ? 'items-center rounded-full border border-white/20 bg-black/55 p-1.5 shadow-lg backdrop-blur-md' : ''}`}>
         <input
+          ref={composerRef}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           maxLength={500}
-          placeholder={compact ? 'Type a message...' : 'Add a comment...'}
+          placeholder="Add a comment..."
           aria-label={compact ? 'Send a live chat message' : 'Add a comment'}
-          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#0b1512] px-3 py-2 text-sm text-white outline-none focus:border-[#eac16e]/50"
+          className={`min-h-11 min-w-0 flex-1 px-3 py-2 text-base text-white outline-none placeholder:text-white/65 focus:border-[#eac16e]/50 sm:text-sm ${compact ? 'rounded-full border-0 bg-transparent' : 'rounded-xl border border-white/10 bg-[#0b1512]'}`}
         />
         <button
           type="submit"
           disabled={busy || !draft.trim()}
-          className="rounded-xl bg-[#eac16e] px-3 text-[#0b100e] disabled:opacity-50"
+          className="flex min-h-10 min-w-10 items-center justify-center rounded-full bg-[#eac16e] px-3 text-[#0b100e] disabled:opacity-50"
           aria-label="Post comment"
         >
           <Send size={16} />
@@ -151,12 +181,16 @@ export default function Streaming() {
   const [connections, setConnections] = useState([])
   const [connectionsLoading, setConnectionsLoading] = useState(false)
   const [liveLikes, setLiveLikes] = useState(0)
+  const [liveGiftFeedback, setLiveGiftFeedback] = useState('')
   const [cohostInviteNotice, setCohostInviteNotice] = useState('')
   const [hasCohostInvitation, setHasCohostInvitation] = useState(false)
   const [cohostBusy, setCohostBusy] = useState(false)
   const [liveFollowBusy, setLiveFollowBusy] = useState(false)
+  const [endingLive, setEndingLive] = useState(false)
   const postFormRef = useRef(null)
+  const liveCommentInputRef = useRef(null)
   const closingStreamRef = useRef(false)
+  const endedLiveRef = useRef('')
   const sharedLiveAttemptRef = useRef('')
   const profileLoaded = Boolean(profile)
   const profileVerified = Boolean(profile?.is_verified)
@@ -204,6 +238,17 @@ export default function Streaming() {
     setPosts(postsData.posts || [])
   }, [])
 
+  const returnFromEndedLive = useCallback((streamId) => {
+    if (endedLiveRef.current === streamId) return
+    endedLiveRef.current = streamId
+    setError('')
+    setNotice('The host ended this live stream. You have been returned to Nexa Stream.')
+    setActiveStream((current) => current?.id === streamId ? null : current)
+    setCommentTarget(null)
+    setHasCohostInvitation(false)
+    setCohostInviteNotice('')
+  }, [])
+
   const refresh = useCallback(async () => {
     setError('')
     try {
@@ -235,13 +280,17 @@ export default function Streaming() {
         const data = await api(`/live/${activeStream.id}/comments`)
         setCommentLists((current) => ({ ...current, [`live:${activeStream.id}`]: data.comments || [] }))
       } catch (requestError) {
+        if (requestError.status === 404) {
+          returnFromEndedLive(activeStream.id)
+          return
+        }
         setError(requestError.message)
       }
     }
     void loadLiveComments()
     const timer = window.setInterval(loadLiveComments, 4000)
     return () => window.clearInterval(timer)
-  }, [activeStream, commentTarget])
+  }, [activeStream, commentTarget, returnFromEndedLive])
 
   useEffect(() => {
     if (!activeStream) return undefined
@@ -255,6 +304,10 @@ export default function Streaming() {
           setHasCohostInvitation(Boolean(invitationData.invited))
         }
       } catch (requestError) {
+        if (requestError.status === 404) {
+          returnFromEndedLive(activeStream.id)
+          return
+        }
         setError(requestError.message)
       }
     }
@@ -262,7 +315,7 @@ export default function Streaming() {
     void refreshLiveState()
     const timer = window.setInterval(() => void refreshLiveState(), 5000)
     return () => window.clearInterval(timer)
-  }, [activeStream])
+  }, [activeStream, returnFromEndedLive])
 
   useEffect(() => {
     if (!profileLoaded || profileVerified) return undefined
@@ -452,6 +505,7 @@ export default function Streaming() {
       setLiveLikes(Number(data.stream.likes || 0))
       setCohostInviteNotice('')
       setHasCohostInvitation(false)
+      setLiveGiftFeedback('')
       closingStreamRef.current = false
       setCommentTarget({ live_session_id: data.stream.id })
       await loadFeed()
@@ -477,6 +531,7 @@ export default function Streaming() {
       setLiveLikes(Number(data.stream.likes || 0))
       setCohostInviteNotice('')
       setHasCohostInvitation(false)
+      setLiveGiftFeedback('')
       closingStreamRef.current = false
       setCommentTarget({ live_session_id: stream.id })
       if (!data.is_host && !data.is_cohost) {
@@ -544,18 +599,25 @@ export default function Streaming() {
   const closeLive = async () => {
     if (closingStreamRef.current) return
     closingStreamRef.current = true
-    if (activeStream?.isHost) {
-      try {
-        await api(`/live/${activeStream.id}/end`, { method: 'POST' })
-      } catch (requestError) {
-        setError(requestError.message)
+    const closingStream = activeStream
+    setEndingLive(Boolean(closingStream?.isHost))
+    setError('')
+    try {
+      if (closingStream?.isHost) {
+        await api(`/live/${closingStream.id}/end`, { method: 'POST' })
       }
+      setActiveStream(null)
+      setCommentTarget(null)
+      setHasCohostInvitation(false)
+      setCohostInviteNotice('')
+      if (closingStream?.isHost) setNotice('Your live stream has ended.')
+      await loadFeed().catch((requestError) => setError(requestError.message))
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      closingStreamRef.current = false
+      setEndingLive(false)
     }
-    setActiveStream(null)
-    setCommentTarget(null)
-    setHasCohostInvitation(false)
-    setCohostInviteNotice('')
-    await loadFeed().catch((requestError) => setError(requestError.message))
   }
 
   const inviteCohost = async (cohostUsername) => {
@@ -653,6 +715,7 @@ export default function Streaming() {
 
   const sendGift = async (gift, target) => {
     setError('')
+    if (target.live_session_id) setLiveGiftFeedback('')
     try {
       await api('/gifts', {
         method: 'POST',
@@ -664,6 +727,9 @@ export default function Streaming() {
       })
       setGiftTarget(null)
       await loadProfile()
+      if (target.live_session_id) {
+        setLiveGiftFeedback(`${gift.name} sent. Creator earnings are tracked in gift coins.`)
+      }
       setNotice(`${gift.name} sent. Creator earnings are tracked in gift coins.`)
     } catch (requestError) {
       setError(requestError.message)
@@ -1258,16 +1324,23 @@ export default function Streaming() {
           <LiveRoom
             stream={activeStream}
             onClose={() => void closeLive()}
+            onEndLive={() => void closeLive()}
+            endingLive={endingLive}
+            giftFeedback={liveGiftFeedback}
+            errorMessage={error}
             likes={liveLikes}
+            commentsCount={shownComments(`live:${activeStream.id}`).length}
+            onFocusComposer={() => liveCommentInputRef.current?.focus()}
             onDoubleTapLike={() => void doubleTapLiveLike()}
             onInviteCohost={(cohostUsername) => void inviteCohost(cohostUsername)}
             cohostInvitation={activeStream.isHost ? cohostInviteNotice : hasCohostInvitation}
             onAcceptCohost={() => void acceptCohostInvite()}
+            onDismissError={() => setError('')}
             invitationBusy={cohostBusy}
             onFollow={() => void followLiveCreator()}
             followingBusy={liveFollowBusy}
-          >
-            <CommentList
+            chatContent={(
+              <CommentList
               comments={shownComments(`live:${activeStream.id}`)}
               draft={commentDrafts[`live:${activeStream.id}`] || ''}
               setDraft={(value) => setCommentDrafts((current) => ({ ...current, [`live:${activeStream.id}`]: value }))}
@@ -1277,8 +1350,11 @@ export default function Streaming() {
               })}
               busy={commentBusy}
               compact
+              composerRef={liveCommentInputRef}
             />
-            <div className="max-h-[38%] shrink-0 overflow-y-auto border-t border-white/10 py-3">
+            )}
+            giftContent={(
+            <div className="max-h-[min(42dvh,22rem)] w-[min(19rem,calc(100vw-5rem))] overflow-y-auto rounded-2xl border border-white/15 bg-[#101311]/95 p-3 shadow-2xl backdrop-blur-xl">
               <p className="mb-2 flex items-center gap-2 px-1 text-xs font-semibold text-[#d1d5cc]">
                 <Sparkles size={14} className="text-[#eac16e]" /> Send a gift
               </p>
@@ -1288,7 +1364,7 @@ export default function Streaming() {
                     type="button"
                     key={gift.gift_id}
                     onClick={() => void sendGift(gift, { live_session_id: activeStream.id })}
-                    className="rounded-xl border border-[#eac16e]/15 bg-white/[0.02] px-2 py-2 text-left text-xs hover:bg-[#eac16e]/10"
+                    className="rounded-xl border border-[#eac16e]/15 bg-white/[0.03] px-2 py-2 text-left text-xs transition hover:bg-[#eac16e]/10"
                   >
                     <span className="mr-1">{gift.icon}</span>{gift.name}
                     <span className="mt-1 block text-[#eac16e]">◉ {gift.coins}</span>
@@ -1296,7 +1372,8 @@ export default function Streaming() {
                 ))}
               </div>
             </div>
-          </LiveRoom>
+            )}
+          />
         </Suspense>
       )}
     </PortalPageLayout>

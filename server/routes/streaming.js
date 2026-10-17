@@ -1174,9 +1174,16 @@ export const createStreamingRouter = ({
     '/live/:streamId/comments',
     requireAuth,
     asyncRoute(async (req, res) => {
+      const stream = await get(
+        db,
+        `SELECT id FROM creator_live_sessions
+         WHERE id = ? AND status = 'live'`,
+        [req.params.streamId]
+      )
+      if (!stream) return sendHttpError(res, 404, 'This live session has ended.')
       res.json({
         success: true,
-        comments: await getCommentList('c.live_session_id = ?', [req.params.streamId]),
+        comments: await getCommentList('c.live_session_id = ?', [stream.id]),
       })
     })
   )
