@@ -141,7 +141,7 @@ export default function EaDownloads() {
         <div className="nf-workspace-heading">
           <span className="nf-eyebrow">YOUR APPROVED EA PRODUCTS</span>
           <h1>Keys and downloads.</h1>
-          <p>Each product has its own account-bound key. Use only the matching key and EA build with the MT5 account shown on its card.</p>
+          <p>Each product has its own compact, account-bound key. Use only the matching product key and EA build. Copy the entire key into the EA&apos;s InpLicenseKey input for the MT5 account shown on its card.</p>
         </div>
         <div className="nf-downloads-nav">
           <button className="nf-secondary" type="button" onClick={() => navigate('/ea-access')}>

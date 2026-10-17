@@ -34,14 +34,14 @@ registered-user count survive API restarts and redeploys.
 After creating an account, clients register their broker, exact MT5 server, account
 number, and demo/live account type at `/ea-access`. All requests remain pending
 until an administrator verifies them in `/admin/licenses`. Approved clients receive
-a distinct signed key for every uploaded EA product. Every product key is bound to
-the approved MT5 account, broker server, and demo/live mode.
+a distinct random key for every EA product. Every product key is bound in the
+server-side database to the approved MT5 account, broker server, demo/live mode,
+and product entitlement.
 
 Configure these backend-only environment variables on the NexaFunds API service:
 
 ```env
 ADMIN_API_KEY=<private admin key>
-LICENSE_SIGNING_SECRET=<at least 32 random bytes, API server only>
 EA_DOWNLOAD_PATH=<absolute path to the compiled .ex5 file>
 ```
 
@@ -54,88 +54,42 @@ the API server; uploads are stored in that file's directory as `<product-id>.ex5
 On hosts such as Render, attach a persistent disk and point `EA_DOWNLOAD_PATH` into
 its mount path so product files survive deploys and restarts.
 
-Clients can submit requests while `LICENSE_SIGNING_SECRET` is missing, but the
-administrator cannot approve requests or issue keys until it is set. Configure at
-least 32 cryptographically random bytes in the API hosting environment (for example,
-Render's service environment variables), then restart/redeploy the API. The API
-derives an Ed25519 signing key from this secret using SHA-256 with a
-NexaFunds-specific context string; the private key is never sent to clients or
-stored in the license payload. Do not put it in frontend `VITE_*` variables, expose
-it, or commit real secrets. Because the key is deterministically derived, changing
-the secret invalidates all existing license signatures; issue replacement keys and
-update the verifier's public key together.
-
-Do not expose these values through `VITE_*` variables or commit real secrets.
 Approved account keys and matching EA downloads are available on the authenticated
 `/ea-downloads` page, separate from account registration at `/ea-access`. Each EA
 download is served only to an authenticated owner of an active account license and
 a product-specific entitlement. The source snapshots in
 `C:\Users\USER\NEXA-FUNDS-AI` are not downloadable EA binaries.
 
-## Signed license format and EA compatibility
+## Compact license keys and EA validation
 
-New issued keys have the format
-`NEXA-AI.<base64url-payload>.<base64url-signature>`, with Base64URL components
-without padding. The signature is Ed25519 over the exact UTF-8 bytes of the
-canonical JSON payload, not over the displayed key. The payload includes version
-and algorithm identifiers, product ID, account type, exact broker-server name,
-encoded account data, encoded account length, first/last digits, all most-frequent
-digits, mode frequency, and median metadata. Account digits are encoded pairwise
-using exactly `0=ZA, 1=XE, 2=YD, 3=KR, 4=JF, 5=IM, 6=UN, 7=GL, 8=OV, 9=PT`.
-Decoding each pair reconstructs the whole original account string; the metadata is
-checked for consistency, not used to guess account numbers. For an even digit
-count, the median is represented by its two middle sorted digits and their exact
-integer-or-half value. Tied modes are listed in order of first appearance in the
-account number. Account identifiers are never converted to floating-point values.
-
-The API validates the Ed25519 signature, canonical payload, decoded account,
-product, account type, broker server, and active server-side entitlement at
-`/api/licenses/validate`. Send the key with the terminal's current values over
-HTTPS:
+New keys use the format `NEXA-AI-XXXX-XXXX-XXXX-XXXX`, where each `X` is a
+cryptographically random Base32 character (80 bits of randomness in total). The
+key is an opaque database token, not a self-contained signed payload. The API
+validates it against the active product entitlement and the account number, exact
+broker server, and demo/live type sent by the EA. The public
+`/api/licenses/validate` endpoint accepts:
 
 ```json
 {
   "product_id": "nexa-ai-pro",
-  "license_key": "NEXA-AI.<base64url-payload>.<base64url-signature>",
+  "license_key": "NEXA-AI-XXXX-XXXX-XXXX-XXXX",
   "account_login": "12345678",
   "broker_server": "Exact-MT5-Server-Name",
   "account_type": "demo"
 }
 ```
 
-Each approved account/product pair receives a distinct signed license. Set the
-product ID in the EA source before compiling; it must exactly match the product ID
-used when uploading that build in `/admin/licenses`. The current source snapshot at
-`C:\Users\USER\NEXA-FUNDS-AI\EA.txt` identifies telemetry account logins but does
-not contain the requested digit mapping, license decoder, Ed25519 verification, or
-a call to `/api/licenses/validate`. Therefore this backend's signed format and
-validation endpoint are implemented and tested, but that EA source is **not yet
-integrated** and must not be represented as verifying these signed licenses. Its
-MQL5 implementation must either call this HTTPS validation endpoint and fail
-closed, or implement the same account decoding and Ed25519 verification locally.
-For a local verifier, configure only the derived public key in the EA; never embed
-the private signing secret. The public key can be exported from the API environment
-with:
+The EA sends those fields over HTTPS through the NexaFunds website's validation
+route. It enables trading only after HTTP 200 with
+`{"success":true,"valid":true}`; it fails closed for invalid, revoked,
+account-mismatched, or unavailable licenses. The EA build's fixed product ID must
+match the product slot used to upload the compiled EA. Never embed an admin key or
+a shared ingestion credential in the EA.
 
-```sh
-node --input-type=module -e "import { getLicensePublicKey } from './server/license-encoding.js'; console.log(getLicensePublicKey())"
-```
-
-The MQL5 verifier must agree on canonical UTF-8 JSON bytes, exact JSON field order
-and types, Base64URL decoding, the digit map and metadata rules, and Ed25519
-signature verification. If the public key or the signing secret changes, replace
-the verifier configuration and reissue keys as a coordinated rotation. The EA must
-enable trading only after successful signature/entitlement verification and fail
-closed on invalid keys, account mismatches, or unavailable validation.
-
-Populate those fields from the entered key and the connected terminal
-(`ACCOUNT_LOGIN`, `ACCOUNT_SERVER`, and `ACCOUNT_TRADE_MODE`) and include the
-EA build's fixed `product_id`. Enable trading only
-when the API returns HTTP 200 with `{"success":true,"valid":true}`; fail closed on
-network errors, other responses, or product/key/account/server/type mismatches.
-Never embed an admin key or a shared ingestion credential in the EA. Signed license
-keys are stored server-side for entitlement lookup; never expose the database or
-its contents to clients.
+When this compact-key format is deployed, old long signed keys are replaced with
+new random keys the next time the authenticated download page or admin license list
+is loaded. Users should copy the newly displayed key into the EA; the old key will
+no longer validate after rotation.
 
 ## Nexa Stream
 

@@ -18,7 +18,6 @@ export default function AdminLicenses() {
   const [licenses, setLicenses] = useState([])
   const [verificationRequests, setVerificationRequests] = useState([])
   const [products, setProducts] = useState([])
-  const [signingConfigured, setSigningConfigured] = useState(false)
   const [uploadFiles, setUploadFiles] = useState({})
   const [uploadingProduct, setUploadingProduct] = useState(null)
   const [deletingProduct, setDeletingProduct] = useState(null)
@@ -54,7 +53,6 @@ export default function AdminLicenses() {
       setLicenses(licenseData.licenses || [])
       setVerificationRequests(verificationData.requests || [])
       setProducts(eaData.products || [])
-      setSigningConfigured(Boolean(eaData.license_configured))
       setAuthenticated(true)
       try {
         if (rememberAdminKey) {
@@ -337,11 +335,6 @@ export default function AdminLicenses() {
                 )
               })}
             </div>
-            {!signingConfigured && (
-              <p className="nf-form-error nf-page-message mt-5" role="alert">
-                License issuance is disabled until the API has a LICENSE_SIGNING_SECRET of at least 32 bytes and is restarted.
-              </p>
-            )}
           </section>
 
           <section className="nf-panel nf-admin-queue">
@@ -391,7 +384,7 @@ export default function AdminLicenses() {
                     )}
                     {license.status === 'pending' && (
                       <div className="nf-admin-actions">
-                        <button className="nf-primary" type="button" disabled={busyId === license.id || !signingConfigured || !license.broker_server?.trim()} onClick={() => handleDecision(license.id, 'approve')}>{busyId === license.id ? 'Updating…' : 'Verify & approve'}</button>
+                        <button className="nf-primary" type="button" disabled={busyId === license.id || !license.broker_server?.trim()} onClick={() => handleDecision(license.id, 'approve')}>{busyId === license.id ? 'Updating…' : 'Verify & approve'}</button>
                         <button className="nf-secondary" type="button" disabled={busyId === license.id} onClick={() => handleDecision(license.id, 'reject')}>Reject request</button>
                       </div>
                     )}

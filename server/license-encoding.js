@@ -2,6 +2,7 @@ import {
   createHash,
   createPrivateKey,
   createPublicKey,
+  randomInt,
   sign,
   verify,
 } from 'node:crypto'
@@ -26,6 +27,22 @@ const LICENSE_PREFIX = 'NEXA-AI'
 const LICENSE_VERSION = 1
 const LICENSE_ALGORITHM = 'NEXA-AI-ACCOUNT-V1'
 const PRIVATE_KEY_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex')
+const OPAQUE_LICENSE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const OPAQUE_LICENSE_PATTERN = /^NEXA-AI-(?:[A-HJ-NP-Z2-9]{4}-){3}[A-HJ-NP-Z2-9]{4}$/
+
+export const createOpaqueLicenseKey = () => {
+  const characters = Array.from(
+    { length: 16 },
+    () => OPAQUE_LICENSE_ALPHABET[randomInt(OPAQUE_LICENSE_ALPHABET.length)]
+  )
+  const groups = Array.from({ length: 4 }, (_, index) =>
+    characters.slice(index * 4, index * 4 + 4).join('')
+  )
+  return `NEXA-AI-${groups.join('-')}`
+}
+
+export const isOpaqueLicenseKey = (licenseKey) =>
+  typeof licenseKey === 'string' && OPAQUE_LICENSE_PATTERN.test(licenseKey)
 
 export const isSigningSecretConfigured = (secret = process.env.LICENSE_SIGNING_SECRET) =>
   typeof secret === 'string' && Buffer.byteLength(secret, 'utf8') >= 32

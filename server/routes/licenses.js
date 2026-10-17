@@ -2,10 +2,8 @@ import { Router } from 'express'
 import { randomUUID } from 'node:crypto'
 import multer from 'multer'
 import {
-  createLicenseKey,
-  isSigningSecretConfigured,
-  verifyLicenseKey,
-  verifyLicenseKeyDetailed,
+  createOpaqueLicenseKey,
+  isOpaqueLicenseKey,
 } from '../license-encoding.js'
 
 const normalizeAccountType = (value) => String(value || '').trim().toLowerCase()
@@ -22,7 +20,7 @@ const getEaProduct = (productId) =>
 const ensureProductLicenseKeys = async (db, licenseId, { all, get, run }) => {
   const license = await get(
     db,
-    'SELECT account_login, account_type, broker_server FROM ea_licenses WHERE id = ?',
+    'SELECT id FROM ea_licenses WHERE id = ?',
     [licenseId]
   )
   if (!license) throw new Error(`Cannot issue keys for missing license ${licenseId}.`)
@@ -34,30 +32,26 @@ const ensureProductLicenseKeys = async (db, licenseId, { all, get, run }) => {
       'SELECT license_key FROM ea_product_licenses WHERE license_id = ? AND product_id = ?',
       [licenseId, product.product_id]
     )
-    const expected = {
-      accountLogin: license.account_login,
-      accountType: license.account_type,
-      brokerServer: license.broker_server,
-      productId: product.product_id,
-    }
-    if (
-      existing?.license_key &&
-      verifyLicenseKey(existing.license_key, expected)
-    ) {
+    if (existing?.license_key && isOpaqueLicenseKey(existing.license_key)) {
       continue
     }
 
-    await run(
-      db,
-      `INSERT INTO ea_product_licenses (license_id, product_id, license_key)
-       VALUES (?, ?, ?) ON CONFLICT (license_id, product_id) DO UPDATE
-       SET license_key = excluded.license_key`,
-      [
-        licenseId,
-        product.product_id,
-        createLicenseKey(license, product.product_id),
-      ]
-    )
+    const licenseKey = createOpaqueLicenseKey()
+    if (existing?.license_key) {
+      await run(
+        db,
+        `UPDATE ea_product_licenses SET license_key = ?
+         WHERE license_id = ? AND product_id = ? AND license_key = ?`,
+        [licenseKey, licenseId, product.product_id, existing.license_key]
+      )
+    } else {
+      await run(
+        db,
+        `INSERT INTO ea_product_licenses (license_id, product_id, license_key)
+         VALUES (?, ?, ?) ON CONFLICT (license_id, product_id) DO NOTHING`,
+        [licenseId, product.product_id, licenseKey]
+      )
+    }
   }
 }
 
@@ -130,17 +124,6 @@ export const createLicenseRouter = ({
     })
   }
 
-  const requireLicenseConfig = (req, res, next) => {
-    if (!isSigningSecretConfigured()) {
-      return res.status(503).json({
-        success: false,
-        error:
-          'EA licensing is unavailable because the API server needs a LICENSE_SIGNING_SECRET of at least 32 bytes. Please contact NexaFunds support.',
-      })
-    }
-    next()
-  }
-
   router.get(
     '/licenses/mine',
     requireAuth,
@@ -155,13 +138,11 @@ export const createLicenseRouter = ({
         [req.session.user.id]
       )
       const activeLicenses = licenses.filter((license) => license.status === 'active')
-      if (isSigningSecretConfigured()) {
-        await Promise.all(
-          activeLicenses.map((license) =>
-            ensureProductLicenseKeys(db, license.id, { all, get, run })
-          )
+      await Promise.all(
+        activeLicenses.map((license) =>
+          ensureProductLicenseKeys(db, license.id, { all, get, run })
         )
-      }
+      )
       const products = await all(
         db,
         `SELECT p.product_id, p.name, p.file_name,
@@ -178,7 +159,7 @@ export const createLicenseRouter = ({
 
       res.json({
         success: true,
-        license_configured: isSigningSecretConfigured(),
+        license_configured: true,
         download_available: availableProducts.some((product) =>
           isAvailableProduct(fs, path, process.env.EA_DOWNLOAD_PATH, product)
         ),
@@ -194,9 +175,7 @@ export const createLicenseRouter = ({
             product
           ),
         })),
-        product_licenses: isSigningSecretConfigured()
-          ? products.filter((product) => product.license_id !== null)
-          : [],
+        product_licenses: products.filter((product) => product.license_id !== null),
       })
     })
   )
@@ -258,7 +237,7 @@ export const createLicenseRouter = ({
       ])
       res.status(201).json({
         success: true,
-        license_configured: isSigningSecretConfigured(),
+        license_configured: true,
         license: {
           ...license,
           broker_server: license.broker_server.startsWith('pending-')
@@ -272,7 +251,6 @@ export const createLicenseRouter = ({
 
   router.post(
     '/licenses/validate',
-    requireLicenseConfig,
     asyncRoute(async (req, res) => {
       const body = req.body || {}
       const accountLogin =
@@ -295,26 +273,8 @@ export const createLicenseRouter = ({
       if (!isValidProductId(productId)) {
         return res.status(401).json({ success: false, valid: false })
       }
-      const verification = verifyLicenseKeyDetailed(licenseKey)
-      const signedClaims = verification.claims
-      if (!signedClaims) {
-        console.warn(`[license-validation] rejected: ${verification.reason}`)
-        return res.status(401).json({ success: false, valid: false })
-      }
-      if (signedClaims.account_login !== accountLogin) {
-        console.warn('[license-validation] rejected: signed_account_mismatch')
-        return res.status(401).json({ success: false, valid: false })
-      }
-      if (signedClaims.account_type !== accountType) {
-        console.warn('[license-validation] rejected: signed_account_type_mismatch')
-        return res.status(401).json({ success: false, valid: false })
-      }
-      if (signedClaims.broker_server.toLowerCase() !== brokerServer.toLowerCase()) {
-        console.warn('[license-validation] rejected: signed_broker_server_mismatch')
-        return res.status(401).json({ success: false, valid: false })
-      }
-      if (signedClaims.product_id !== productId) {
-        console.warn('[license-validation] rejected: signed_product_mismatch')
+      if (!isOpaqueLicenseKey(licenseKey)) {
+        console.warn('[license-validation] rejected: invalid_key_format')
         return res.status(401).json({ success: false, valid: false })
       }
       const license = await get(
@@ -333,7 +293,7 @@ export const createLicenseRouter = ({
         console.warn('[license-validation] rejected: license_not_active')
         return res.status(401).json({ success: false, valid: false })
       }
-      if (license.account_login !== signedClaims.account_login) {
+      if (license.account_login !== accountLogin) {
         console.warn('[license-validation] rejected: account_binding_mismatch')
         return res.status(401).json({ success: false, valid: false })
       }
@@ -357,7 +317,6 @@ export const createLicenseRouter = ({
   router.get(
     '/ea/download/:licenseId/:productId',
     requireAuth,
-    requireLicenseConfig,
     asyncRoute(async (req, res) => {
       const productId = String(req.params.productId || '').trim().toLowerCase()
       if (!isValidProductId(productId)) {
@@ -426,15 +385,13 @@ export const createLicenseRouter = ({
          FROM ea_licenses l JOIN users u ON u.id = l.user_id
          ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.id DESC`
       )
-      if (isSigningSecretConfigured()) {
-        await Promise.all(
-          licenses
-            .filter((license) => license.status === 'active')
-            .map((license) =>
-              ensureProductLicenseKeys(db, license.id, { all, get, run })
-            )
-        )
-      }
+      await Promise.all(
+        licenses
+          .filter((license) => license.status === 'active')
+          .map((license) =>
+            ensureProductLicenseKeys(db, license.id, { all, get, run })
+          )
+      )
       const products = await all(
         db,
         'SELECT product_id, name, file_name, created_at FROM ea_products ORDER BY created_at, name'
@@ -539,7 +496,6 @@ export const createLicenseRouter = ({
       )
       res.json({
         success: true,
-        license_configured: isSigningSecretConfigured(),
         products: EA_PRODUCTS.map((slot) => {
           const product = products.find((entry) => entry.product_id === slot.product_id)
           return {
@@ -610,14 +566,12 @@ export const createLicenseRouter = ({
              storage_name = excluded.storage_name`,
           [productId, product.name, originalName, storageName]
         )
-        if (isSigningSecretConfigured()) {
-          const activeLicenses = await all(db, "SELECT id FROM ea_licenses WHERE status = 'active'")
-          await Promise.all(
-            activeLicenses.map((license) =>
-              ensureProductLicenseKeys(db, license.id, { all, get, run })
-            )
+        const activeLicenses = await all(db, "SELECT id FROM ea_licenses WHERE status = 'active'")
+        await Promise.all(
+          activeLicenses.map((license) =>
+            ensureProductLicenseKeys(db, license.id, { all, get, run })
           )
-        }
+        )
       } catch (error) {
         if (uploadInstalled) {
           await fs.promises.unlink(targetPath).catch((cleanupError) => {
@@ -722,7 +676,6 @@ export const createLicenseRouter = ({
   router.post(
     '/admin/licenses/:licenseId/decision',
     requireAdmin,
-    requireLicenseConfig,
     asyncRoute(async (req, res) => {
       const decision = String(req.body?.decision || '').trim().toLowerCase()
       const brokerServer = String(req.body?.broker_server || '').trim()

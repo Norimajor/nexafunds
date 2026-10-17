@@ -2,9 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   createLicenseKey,
+  createOpaqueLicenseKey,
   decodeAccount,
   DIGIT_CODES,
   encodeAccount,
+  isOpaqueLicenseKey,
   isSigningSecretConfigured,
   verifyLicenseKey,
   verifyLicenseKeyDetailed,
@@ -16,6 +18,16 @@ const accountLicense = {
   account_type: 'demo',
   broker_server: 'Broker-MT5',
 }
+
+test('creates compact opaque keys with 80 bits of randomness', () => {
+  const keys = new Set(Array.from({ length: 100 }, () => createOpaqueLicenseKey()))
+  assert.equal(keys.size, 100)
+  for (const key of keys) {
+    assert.match(key, /^NEXA-AI-[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){3}$/)
+    assert.equal(isOpaqueLicenseKey(key), true)
+  }
+  assert.equal(isOpaqueLicenseKey('NEXA-AI.bad.payload'), false)
+})
 
 test('uses the EA digit mapping exactly and reverses every mapped digit', () => {
   assert.deepEqual(DIGIT_CODES, {
