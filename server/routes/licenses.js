@@ -301,6 +301,7 @@ export const createLicenseRouter = ({
         productId,
       })
       if (!signedClaims) {
+        console.warn('[license-validation] rejected: signed_claims_mismatch')
         return res.status(401).json({ success: false, valid: false })
       }
       const license = await get(
@@ -311,14 +312,28 @@ export const createLicenseRouter = ({
         [productId, licenseKey]
       )
 
-      const valid =
-        license?.status === 'active' &&
-        license.account_login === signedClaims.account_login &&
-        license.broker_server.toLowerCase() === brokerServer.toLowerCase() &&
-        license.account_type === accountType &&
-        license.product_id === productId
-
-      if (!valid) {
+      if (!license) {
+        console.warn('[license-validation] rejected: entitlement_not_found')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (license.status !== 'active') {
+        console.warn('[license-validation] rejected: license_not_active')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (license.account_login !== signedClaims.account_login) {
+        console.warn('[license-validation] rejected: account_binding_mismatch')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (license.broker_server.toLowerCase() !== brokerServer.toLowerCase()) {
+        console.warn('[license-validation] rejected: broker_server_mismatch')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (license.account_type !== accountType) {
+        console.warn('[license-validation] rejected: account_type_mismatch')
+        return res.status(401).json({ success: false, valid: false })
+      }
+      if (license.product_id !== productId) {
+        console.warn('[license-validation] rejected: product_mismatch')
         return res.status(401).json({ success: false, valid: false })
       }
 
