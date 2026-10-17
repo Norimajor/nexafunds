@@ -7,6 +7,7 @@ import {
   encodeAccount,
   isSigningSecretConfigured,
   verifyLicenseKey,
+  verifyLicenseKeyDetailed,
 } from './license-encoding.js'
 
 const secret = 'test-only signing secret with sufficient length'
@@ -145,6 +146,27 @@ test('rejects an invalid signature and licenses used by another account', () => 
   assert.equal(verifyLicenseKey(key, { brokerServer: 'Other-Server' }, secret), null)
   assert.equal(verifyLicenseKey(key, null, secret), null)
   assert.equal(verifyLicenseKey(key, 'not-an-object', secret), null)
+})
+
+test('reports safe license verification failure reasons', () => {
+  const key = createLicenseKey(accountLicense, 'nexa-ai-pro', secret)
+  const [, payload, signature] = key.split('.')
+  const alteredSignature =
+    signature[0] === 'A' ? `B${signature.slice(1)}` : `A${signature.slice(1)}`
+
+  assert.equal(
+    verifyLicenseKeyDetailed('not-a-license', {}, secret).reason,
+    'invalid_key_format'
+  )
+  assert.equal(
+    verifyLicenseKeyDetailed(`NEXA-AI.${payload}.${alteredSignature}`, {}, secret).reason,
+    'signature_mismatch'
+  )
+  assert.equal(
+    verifyLicenseKeyDetailed(key, {}, 'short').reason,
+    'signing_secret_invalid'
+  )
+  assert.equal(verifyLicenseKeyDetailed(key, {}, secret).claims.account_login, '12345678')
 })
 
 test('requires an adequately sized signing secret', () => {

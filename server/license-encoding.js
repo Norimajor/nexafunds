@@ -160,34 +160,43 @@ export const createLicenseKey = (license, productId, secret) => {
   return `${LICENSE_PREFIX}.${toBase64Url(payloadBytes)}.${toBase64Url(signature)}`
 }
 
-export const verifyLicenseKey = (
+export const verifyLicenseKeyDetailed = (
   licenseKey,
   expected = {},
   secret = process.env.LICENSE_SIGNING_SECRET
 ) => {
-  if (typeof licenseKey !== 'string') return null
-  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return null
+  const reject = (reason) => ({ claims: null, reason })
+  if (typeof licenseKey !== 'string') return reject('invalid_key_type')
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) {
+    return reject('invalid_expected_claims')
+  }
 
   const parts = licenseKey.split('.')
-  if (parts.length !== 3 || parts[0] !== LICENSE_PREFIX) return null
+  if (parts.length !== 3 || parts[0] !== LICENSE_PREFIX) {
+    return reject('invalid_key_format')
+  }
 
   const payloadBytes = fromBase64Url(parts[1])
   const signature = fromBase64Url(parts[2])
-  if (!payloadBytes || !signature || signature.length !== 64) return null
+  if (!payloadBytes || !signature || signature.length !== 64) {
+    return reject('invalid_key_encoding')
+  }
 
   let payload
   try {
     payload = JSON.parse(payloadBytes.toString('utf8'))
   } catch {
-    return null
+    return reject('malformed_payload')
   }
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return reject('malformed_payload')
+  }
 
   let accountLogin
   try {
     accountLogin = decodeAccount(payload.account_code, payload.account_length)
   } catch {
-    return null
+    return reject('malformed_account_claim')
   }
 
   let canonicalPayload
@@ -199,10 +208,10 @@ export const verifyLicenseKey = (
       productId: payload.product_id,
     })
   } catch {
-    return null
+    return reject('malformed_signed_claims')
   }
   const canonicalBytes = Buffer.from(JSON.stringify(canonicalPayload), 'utf8')
-  if (!payloadBytes.equals(canonicalBytes)) return null
+  if (!payloadBytes.equals(canonicalBytes)) return reject('noncanonical_payload')
 
   let signatureValid = false
   try {
@@ -213,9 +222,11 @@ export const verifyLicenseKey = (
       signature
     )
   } catch {
-    return null
+    return reject(
+      isSigningSecretConfigured(secret) ? 'signature_verification_failed' : 'signing_secret_invalid'
+    )
   }
-  if (!signatureValid) return null
+  if (!signatureValid) return reject('signature_mismatch')
 
   const brokerServerMatches =
     expected.brokerServer === undefined ||
@@ -228,8 +239,14 @@ export const verifyLicenseKey = (
     (expected.productId !== undefined && payload.product_id !== expected.productId) ||
     !brokerServerMatches
   ) {
-    return null
+    return reject('expected_claims_mismatch')
   }
 
-  return { ...payload, account_login: accountLogin }
+  return {
+    claims: { ...payload, account_login: accountLogin },
+    reason: null,
+  }
 }
+
+export const verifyLicenseKey = (licenseKey, expected = {}, secret = process.env.LICENSE_SIGNING_SECRET) =>
+  verifyLicenseKeyDetailed(licenseKey, expected, secret).claims

@@ -5,6 +5,7 @@ import {
   createLicenseKey,
   isSigningSecretConfigured,
   verifyLicenseKey,
+  verifyLicenseKeyDetailed,
 } from '../license-encoding.js'
 
 const normalizeAccountType = (value) => String(value || '').trim().toLowerCase()
@@ -294,9 +295,10 @@ export const createLicenseRouter = ({
       if (!isValidProductId(productId)) {
         return res.status(401).json({ success: false, valid: false })
       }
-      const signedClaims = verifyLicenseKey(licenseKey)
+      const verification = verifyLicenseKeyDetailed(licenseKey)
+      const signedClaims = verification.claims
       if (!signedClaims) {
-        console.warn('[license-validation] rejected: invalid_or_malformed_key')
+        console.warn(`[license-validation] rejected: ${verification.reason}`)
         return res.status(401).json({ success: false, valid: false })
       }
       if (signedClaims.account_login !== accountLogin) {
