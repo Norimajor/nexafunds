@@ -10,6 +10,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import strategyRouter from './routes/strategy.js'
 import mlRouter from './routes/ml.js'
+import dashboardRoutes from './routes/dashboard.js'
 import { createLicenseRouter } from './routes/licenses.js'
 import { createStreamingRouter } from './routes/streaming.js'
 import { createPostgresUserStore } from './user-store.js'
@@ -1391,6 +1392,7 @@ app.post(
 // ============================================================
 app.use('/api/strategy', strategyRouter)
 app.use('/api/ml', mlRouter)
+app.use('/api/dashboard', dashboardRoutes)
 app.use(express.static(DIST_DIR))
 app.get('/{*splat}', (req, res, next) => {
   if (req.path.startsWith('/api/')) {
