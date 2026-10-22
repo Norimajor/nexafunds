@@ -5,12 +5,12 @@
 // POST /api/mt5/panel.bmp  (header X-API-Key, body = EA state JSON)
 //  -> 32-bit BMP body + header "X-Hitmap: action,x,y,w,h;..."
 import express from 'express'
+import { timingSafeEqual } from 'node:crypto'
 import puppeteer from 'puppeteer'
 import { PNG } from 'pngjs'
 
-const PANEL_URL = process.env.PANEL_URL
-const W = 460
-const H = 720
+const PANEL_WIDTH = 365
+const PANEL_HEIGHT = 555
 
 let page
 let busy = Promise.resolve()
@@ -19,12 +19,27 @@ async function getPage() {
   if (page && !page.isClosed()) return page
   const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] })
   page = await browser.newPage()
-  await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 })
-  await page.goto(PANEL_URL, { waitUntil: 'networkidle0' })
+  await page.setViewport({ width: PANEL_WIDTH, height: PANEL_HEIGHT, deviceScaleFactor: 1 })
+  await page.goto(getPanelUrl(), { waitUntil: 'networkidle0' })
   await page.waitForFunction('window.__panelReady === true')
   await page.evaluate(() => document.fonts.ready)
   browser.on('disconnected', () => { page = undefined })
   return page
+}
+
+function getPanelUrl() {
+  const fallbackPort = process.env.PORT || '3000'
+  const panelUrl = new URL(process.env.PANEL_URL || `http://127.0.0.1:${fallbackPort}/ea-panel`)
+  if (!['http:', 'https:'].includes(panelUrl.protocol) || panelUrl.username || panelUrl.password) {
+    throw new Error('PANEL_URL must be an HTTP or HTTPS URL without credentials')
+  }
+  return panelUrl.toString()
+}
+
+function hasValidPanelKey(presentedKey) {
+  const expected = Buffer.from(process.env.MT5_API_KEY || '', 'utf8')
+  const presented = Buffer.from(String(presentedKey || ''), 'utf8')
+  return expected.length > 0 && expected.length === presented.length && timingSafeEqual(expected, presented)
 }
 
 function pngToBmp(pngBuf) {
@@ -55,26 +70,37 @@ function pngToBmp(pngBuf) {
 }
 
 export function mountPanelRenderer(app) {
-  app.post('/api/mt5/panel.bmp', express.json({ limit: '256kb' }), (req, res) => {
-    if (req.get('X-API-Key') !== process.env.MT5_API_KEY) return res.status(401).end()
-    busy = busy.then(async () => {
-      try {
-        const p = await getPage()
-        await p.evaluate((s) => window.__setState(s), req.body || {})
-        const el = await p.$('#panel-root > div')
-        const shot = await el.screenshot({ type: 'png', omitBackground: true })
-        const hit = await p.evaluate(() => window.__getHitmap())
-        res.set('Content-Type', 'image/bmp')
-        res.set('Cache-Control', 'no-store')
-        res.set('X-Hitmap', hit.map((h) => `${h.action},${h.x},${h.y},${h.w},${h.h}`).join(';'))
-        res.send(pngToBmp(shot))
-      } catch (e) {
-        console.error('panel render failed', e)
-        page = undefined
-        res.status(503).end()
+  app.post(
+    '/api/mt5/panel.bmp',
+    express.json({ limit: '256kb' }),
+    (req, res) => {
+      if (!hasValidPanelKey(req.get('X-API-Key'))) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' })
       }
-    })
-  })
+
+      const render = busy.catch(() => {}).then(async () => {
+        if (res.destroyed) return
+        try {
+          const p = await getPage()
+          await p.evaluate((s) => window.__setState(s), req.body || {})
+          await p.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+          const el = await p.$('#panel-root > .ea-panel-frame')
+          if (!el) throw new Error('EA panel root is missing from PANEL_URL')
+          const shot = await el.screenshot({ type: 'png', omitBackground: true })
+          const hit = await p.evaluate(() => window.__getHitmap())
+          res.set('Content-Type', 'image/bmp')
+          res.set('Cache-Control', 'no-store')
+          res.set('X-Hitmap', hit.map((h) => `${h.action},${h.x},${h.y},${h.w},${h.h}`).join(';'))
+          res.send(pngToBmp(shot))
+        } catch (e) {
+          console.error('panel render failed', e)
+          page = undefined
+          if (!res.headersSent) res.status(503).json({ success: false, error: 'Panel renderer unavailable' })
+        }
+      })
+      busy = render.catch(() => {})
+    }
+  )
 }
 
 // Usage in server.js:  import { mountPanelRenderer } from './render-server.js'

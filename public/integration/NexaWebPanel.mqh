@@ -9,14 +9,19 @@ input string WP_Url    = "https://nexafunds.onrender.com/api/mt5/panel.bmp";
 input string WP_ApiKey = "";
 input int    WP_X      = 10;
 input int    WP_Y      = 30;
+input int    WP_TimeoutMs = 1000;
 
 #define WP_OBJ "NEXA_WEBPANEL"
 #define WP_RES "::nexa_webpanel"
+#define WP_STATUS_OBJ "NEXA_WEBPANEL_STATUS"
 
 string  wp_actions[];
 int     wp_rects[][4];
 string  wp_tab = "trade";
-datetime wp_lastOk = 0;
+uint    wp_lastOk = 0;
+uint    wp_nextRefresh = 0;
+uint    wp_retryDelay = 1000;
+bool    wp_hasImage = false;
 
 // Implement in your EA: called when a panel button is clicked.
 void WP_OnAction(const string action);
@@ -25,20 +30,33 @@ string WP_BuildStateJson();
 
 bool WP_Init()
   {
-   EventSetTimer(1);
-   ObjectCreate(0, WP_OBJ, OBJ_BITMAP_LABEL, 0, 0, 0);
+   if(!ObjectCreate(0, WP_OBJ, OBJ_BITMAP_LABEL, 0, 0, 0))
+     {
+      Print("[NEXA][PANEL] Could not create bitmap object: ", GetLastError());
+      return false;
+     }
    ObjectSetInteger(0, WP_OBJ, OBJPROP_XDISTANCE, WP_X);
    ObjectSetInteger(0, WP_OBJ, OBJPROP_YDISTANCE, WP_Y);
    ObjectSetInteger(0, WP_OBJ, OBJPROP_SELECTABLE, false);
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, false);
+   ObjectCreate(0, WP_STATUS_OBJ, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, WP_STATUS_OBJ, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, WP_STATUS_OBJ, OBJPROP_XDISTANCE, WP_X + 8);
+   ObjectSetInteger(0, WP_STATUS_OBJ, OBJPROP_YDISTANCE, WP_Y + 20);
+   ObjectSetInteger(0, WP_STATUS_OBJ, OBJPROP_COLOR, clrTomato);
+   ObjectSetInteger(0, WP_STATUS_OBJ, OBJPROP_FONTSIZE, 9);
+   ObjectSetInteger(0, WP_STATUS_OBJ, OBJPROP_SELECTABLE, false);
+   ObjectSetString(0, WP_STATUS_OBJ, OBJPROP_TEXT, "NEXA panel: waiting for server");
+   wp_nextRefresh = 0;
+   wp_retryDelay = 1000;
    WP_Refresh();
    return true;
   }
 
 void WP_Deinit()
   {
-   EventKillTimer();
    ObjectDelete(0, WP_OBJ);
+   ObjectDelete(0, WP_STATUS_OBJ);
    ResourceFree(WP_RES);
   }
 
@@ -78,39 +96,82 @@ int WP_ReadInt(const uchar &b[], int o) { return b[o] | (b[o+1] << 8) | (b[o+2] 
 
 void WP_Refresh()
   {
+   uint now = GetTickCount();
+   if(WP_ApiKey == "")
+     {
+      ObjectSetString(0, WP_STATUS_OBJ, OBJPROP_TEXT, "NEXA panel: set WP_ApiKey in EA inputs");
+      return;
+     }
    string json = WP_BuildStateJson();
    uchar body[], result[];
    StringToCharArray(json, body, 0, StringLen(json), CP_UTF8);
    string headers = "Content-Type: application/json\r\nX-API-Key: " + WP_ApiKey + "\r\n";
    string resHeaders;
-   int code = WebRequest("POST", WP_Url, headers, 3000, body, result, resHeaders);
-   if(code != 200 || ArraySize(result) < 54 || result[0] != 'B' || result[1] != 'M')
+   int timeout = (int)MathMax(250, MathMin(3000, WP_TimeoutMs));
+   int code = WebRequest("POST", WP_Url, headers, timeout, body, result, resHeaders);
+   int size = ArraySize(result);
+   if(code != 200 || size < 54 || result[0] != 'B' || result[1] != 'M')
      {
-      if(TimeCurrent() - wp_lastOk > 10) Comment("NEXA panel: server unreachable (", code, ")");
-      return; // keep last good image on screen
+      string reason = code < 0 ? "request failed (" + IntegerToString(GetLastError()) + ")" :
+                      "server unavailable (" + IntegerToString(code) + ")";
+      if(wp_lastOk == 0 || now - wp_lastOk > 10000)
+         ObjectSetString(0, WP_STATUS_OBJ, OBJPROP_TEXT, "NEXA panel: " + reason);
+      wp_nextRefresh = now + wp_retryDelay;
+      wp_retryDelay = (uint)MathMin(30000, wp_retryDelay * 2);
+      return;
      }
-   Comment("");
-   wp_lastOk = TimeCurrent();
    int off = WP_ReadInt(result, 10), w = WP_ReadInt(result, 18), h = WP_ReadInt(result, 22);
+   long end = (long)off + (long)w * h * 4;
+   if(off < 54 || w <= 0 || h <= 0 || w > 1000 || h > 1200 ||
+      (WP_ReadInt(result, 28) & 0xFFFF) != 32 || end > size)
+     {
+      ObjectSetString(0, WP_STATUS_OBJ, OBJPROP_TEXT, "NEXA panel: invalid image response");
+      wp_nextRefresh = now + wp_retryDelay;
+      wp_retryDelay = (uint)MathMin(30000, wp_retryDelay * 2);
+      return;
+     }
    uint px[];
-   ArrayResize(px, w * h);
+   if(ArrayResize(px, w * h) != w * h)
+     {
+      ObjectSetString(0, WP_STATUS_OBJ, OBJPROP_TEXT, "NEXA panel: image allocation failed");
+      wp_nextRefresh = now + wp_retryDelay;
+      wp_retryDelay = (uint)MathMin(30000, wp_retryDelay * 2);
+      return;
+     }
    for(int y = 0; y < h; y++)
       for(int x = 0; x < w; x++)
         {
          int s = off + ((h - 1 - y) * w + x) * 4;
          px[y * w + x] = ((uint)result[s+3] << 24) | ((uint)result[s+2] << 16) | ((uint)result[s+1] << 8) | result[s];
         }
-   ResourceCreate(WP_RES, px, w, h, 0, 0, w, COLOR_FORMAT_ARGB_NORMALIZE);
+   if(!ResourceCreate(WP_RES, px, w, h, 0, 0, w, COLOR_FORMAT_ARGB_NORMALIZE))
+     {
+      ObjectSetString(0, WP_STATUS_OBJ, OBJPROP_TEXT, "NEXA panel: image resource update failed");
+      wp_nextRefresh = now + wp_retryDelay;
+      wp_retryDelay = (uint)MathMin(30000, wp_retryDelay * 2);
+      return;
+     }
    ObjectSetString(0, WP_OBJ, OBJPROP_BMPFILE, WP_RES);
    WP_ParseHitmap(WP_Header(resHeaders, "X-Hitmap"));
+   wp_lastOk = now;
+   wp_hasImage = true;
+   wp_retryDelay = 1000;
+   wp_nextRefresh = now + 1000;
+   ObjectSetString(0, WP_STATUS_OBJ, OBJPROP_TEXT, "");
    ChartRedraw();
   }
 
-void WP_OnTimer() { WP_Refresh(); }
+void WP_OnTimer()
+  {
+   uint now = GetTickCount();
+   if((int)(now - wp_nextRefresh) < 0) return;
+   WP_Refresh();
+  }
 
 void WP_OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
   {
-   if(id != CHARTEVENT_CLICK) return;
+   if(id != CHARTEVENT_CLICK || !wp_hasImage || wp_lastOk == 0 ||
+      GetTickCount() - wp_lastOk > 10000) return;
    int cx = (int)lparam - WP_X, cy = (int)dparam - WP_Y;
    for(int i = 0; i < ArraySize(wp_actions); i++)
       if(cx >= wp_rects[i][0] && cx < wp_rects[i][0] + wp_rects[i][2] &&
@@ -118,6 +179,7 @@ void WP_OnChartEvent(const int id, const long &lparam, const double &dparam, con
         {
          if(StringFind(wp_actions[i], "tab:") == 0) wp_tab = StringSubstr(wp_actions[i], 4);
          WP_OnAction(wp_actions[i]);
+         wp_nextRefresh = 0;
          WP_Refresh(); // instant feedback
          return;
         }

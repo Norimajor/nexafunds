@@ -12,6 +12,7 @@ import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
 import Transactions from './pages/Transactions'
 import StrategyAI from './pages/StrategyAI'
+import EaChartPanel from './pages/EaChartPanel'
 
 const Streaming = lazy(() => import('./pages/Streaming'))
 
@@ -52,6 +53,7 @@ export default function App() {
           )}
         />
         <Route path="/strategy-ai" element={<StrategyAI />} />
+        <Route path="/ea-panel" element={<EaChartPanel />} />
       </Routes>
     </BrowserRouter>
   )

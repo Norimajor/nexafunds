@@ -60,6 +60,33 @@ download is served only to an authenticated owner of an active account license a
 a product-specific entitlement. The source snapshots in
 `C:\Users\USER\NEXA-FUNDS-AI` are not downloadable EA binaries.
 
+## MT5 HTML Dashboard Panel
+
+The EA chart panel is a browser-rendered image, not an embedded browser. The API
+loads `/ea-panel` in headless Chromium, applies the EA state, and returns a BMP
+plus `X-Hitmap` coordinates for MQL5 chart click handling. The React page exposes
+the state and hitmap hooks required by the renderer.
+
+Configure these values on the API hosting service:
+
+```env
+MT5_API_KEY=<long random shared secret>
+PANEL_URL=https://your-frontend-domain.example/ea-panel
+```
+
+`PANEL_URL` defaults to the same Express service at `/ea-panel` when omitted. If
+the frontend is deployed separately, set it to that public HTTPS URL. Keep
+`MT5_API_KEY` private and set the same value in the EA's `WP_ApiKey` input. In MT5,
+allow the API origin under Tools > Options > Expert Advisors > Allow WebRequest for
+listed URL, and configure the EA's `WP_Url` as
+`https://your-api-domain.example/api/mt5/panel.bmp`.
+
+The API service requires Node.js 22.12 or newer and must be able to launch Chromium.
+Production dependency installation downloads Puppeteer's browser; deployments must
+allow that install step and provide the shared libraries required by Chromium. The
+panel renderer is rate-limited by the EA refresh timer and serializes screenshots
+through one browser page.
+
 ## Compact license keys and EA validation
 
 New keys use the format `NEXA-AI-XXXX-XXXX-XXXX-XXXX`, where each `X` is a

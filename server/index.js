@@ -13,6 +13,7 @@ import mlRouter from './routes/ml.js'
 import dashboardRoutes from './routes/dashboard.js'
 import { createLicenseRouter } from './routes/licenses.js'
 import { createStreamingRouter } from './routes/streaming.js'
+import { mountPanelRenderer } from '../public/integration/render-server.js'
 import { createPostgresUserStore } from './user-store.js'
 import { createStreamingSchema } from './streaming-schema.js'
 
@@ -1393,6 +1394,7 @@ app.post(
 app.use('/api/strategy', strategyRouter)
 app.use('/api/ml', mlRouter)
 app.use('/api/dashboard', dashboardRoutes)
+mountPanelRenderer(app)
 app.use(express.static(DIST_DIR))
 app.get('/{*splat}', (req, res, next) => {
   if (req.path.startsWith('/api/')) {
