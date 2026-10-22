@@ -66,7 +66,7 @@ function hasValidPanelKey(presentedKey) {
 }
 
 export function pngToBmp(pngBuf) {
-  const png = PNG.sync.read(pngBuf)
+  const png = PNG.sync.read(Buffer.from(pngBuf))
   const { width, height, data } = png
   const rowBytes = width * 4
   const out = Buffer.alloc(54 + rowBytes * height)

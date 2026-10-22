@@ -39,7 +39,7 @@ test('converts rendered PNG data into a valid bottom-up 32-bit BMP', () => {
   const png = new PNG({ width: 2, height: 1 })
   png.data.set([255, 0, 0, 255, 0, 255, 0, 128])
 
-  const bmp = pngToBmp(PNG.sync.write(png))
+  const bmp = pngToBmp(new Uint8Array(PNG.sync.write(png)))
 
   assert.equal(bmp.toString('ascii', 0, 2), 'BM')
   assert.equal(bmp.readUInt32LE(2), bmp.length)
