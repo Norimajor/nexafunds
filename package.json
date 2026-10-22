@@ -12,6 +12,8 @@
     "lint": "oxlint",
     "test": "node --test",
     "preview": "vite preview",
+    "install:browser": "puppeteer browsers install chrome",
+    "postinstall": "npm run install:browser",
     "start": "node server/index.js"
   },
   "dependencies": {
