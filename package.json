@@ -12,11 +12,11 @@
     "lint": "oxlint",
     "test": "node --test",
     "preview": "vite preview",
-    "install:browser": "puppeteer browsers install chrome",
-    "postinstall": "npm run install:browser",
-    "start": "node server/index.js"
+    "install:browser": "puppeteer browsers install chrome-headless-shell",
+    "start": "npm run install:browser && node server/index.js"
   },
   "dependencies": {
+    "@puppeteer/browsers": "3.2.5",
     "@aws-sdk/client-s3": "^3.1152.0",
     "@aws-sdk/lib-storage": "^3.1152.0",
     "@aws-sdk/s3-request-presigner": "^3.1152.0",

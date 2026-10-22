@@ -7,24 +7,47 @@
 import express from 'express'
 import { timingSafeEqual } from 'node:crypto'
 import puppeteer from 'puppeteer'
+import { Browser, computeExecutablePath } from '@puppeteer/browsers'
 import { PNG } from 'pngjs'
 
 const PANEL_WIDTH = 365
 const PANEL_HEIGHT = 555
 
 let page
+let browser
 let busy = Promise.resolve()
 
 async function getPage() {
   if (page && !page.isClosed()) return page
-  const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] })
-  page = await browser.newPage()
-  await page.setViewport({ width: PANEL_WIDTH, height: PANEL_HEIGHT, deviceScaleFactor: 1 })
-  await page.goto(getPanelUrl(), { waitUntil: 'networkidle0' })
-  await page.waitForFunction('window.__panelReady === true')
-  await page.evaluate(() => document.fonts.ready)
-  browser.on('disconnected', () => { page = undefined })
-  return page
+  const cachePath = await puppeteer.defaultDownloadPath()
+  const executablePath = computeExecutablePath({
+    cacheDir: cachePath,
+    browser: Browser.CHROMEHEADLESSSHELL,
+    buildId: await puppeteer.browserVersion(),
+  })
+  console.info(`[panel] Chrome executable: ${executablePath}; Puppeteer cache: ${cachePath}`)
+  try {
+    browser = await puppeteer.launch({ headless: 'shell', args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+    page = await browser.newPage()
+    await page.setViewport({ width: PANEL_WIDTH, height: PANEL_HEIGHT, deviceScaleFactor: 1 })
+    await page.goto(getPanelUrl(), { waitUntil: 'networkidle0' })
+    await page.waitForSelector('#panel-root > .ea-panel-frame', { timeout: 30000 })
+    await page.waitForFunction('window.__panelReady === true', { timeout: 30000 })
+    await page.evaluate(() => document.fonts.ready)
+    browser.on('disconnected', () => {
+      page = undefined
+      browser = undefined
+    })
+    return page
+  } catch (error) {
+    console.error(`[panel] Chrome launch or dashboard page initialization failed at ${executablePath}`, error)
+    page = undefined
+    if (browser) await browser.close().catch((closeError) => {
+      console.error('[panel] Failed to close the unusable Chrome instance', closeError)
+    })
+    browser = undefined
+    throw error
+  }
 }
 
 function getPanelUrl() {
@@ -42,7 +65,7 @@ function hasValidPanelKey(presentedKey) {
   return expected.length > 0 && expected.length === presented.length && timingSafeEqual(expected, presented)
 }
 
-function pngToBmp(pngBuf) {
+export function pngToBmp(pngBuf) {
   const png = PNG.sync.read(pngBuf)
   const { width, height, data } = png
   const rowBytes = width * 4
@@ -87,14 +110,23 @@ export function mountPanelRenderer(app) {
           const el = await p.$('#panel-root > .ea-panel-frame')
           if (!el) throw new Error('EA panel root is missing from PANEL_URL')
           const shot = await el.screenshot({ type: 'png', omitBackground: true })
+          const bmp = pngToBmp(shot)
+          if (bmp.toString('ascii', 0, 2) !== 'BM' || bmp.readUInt32LE(2) !== bmp.length ||
+              bmp.readUInt32LE(10) !== 54 || bmp.readUInt16LE(28) !== 32) {
+            throw new Error('Panel renderer produced an invalid 32-bit BMP image')
+          }
           const hit = await p.evaluate(() => window.__getHitmap())
           res.set('Content-Type', 'image/bmp')
           res.set('Cache-Control', 'no-store')
           res.set('X-Hitmap', hit.map((h) => `${h.action},${h.x},${h.y},${h.w},${h.h}`).join(';'))
-          res.send(pngToBmp(shot))
+          res.send(bmp)
         } catch (e) {
           console.error('panel render failed', e)
           page = undefined
+          if (browser) await browser.close().catch((closeError) => {
+            console.error('[panel] Failed to close Chrome after a render error', closeError)
+          })
+          browser = undefined
           if (!res.headersSent) res.status(503).json({ success: false, error: 'Panel renderer unavailable' })
         }
       })

@@ -82,13 +82,15 @@ listed URL, and configure the EA's `WP_Url` as
 `https://your-api-domain.example/api/mt5/panel.bmp`.
 
 The API service requires Node.js 22.12 or newer and must be able to launch Chromium.
-The package `postinstall` step explicitly runs `puppeteer browsers install chrome`,
-so Render downloads the matching Chrome build during dependency installation.
-Keep install scripts enabled in Render (do not use `npm install --ignore-scripts`).
-If Chrome is still missing, set the Render build command to
-`npm install && npm run install:browser` and redeploy. The host must also provide
-the shared libraries required by Chromium. The panel renderer is rate-limited by
-the EA refresh timer and serializes screenshots through one browser page.
+Render's build and runtime environments may not share Puppeteer's browser cache, so
+the start script explicitly runs `puppeteer browsers install chrome-headless-shell`
+immediately before starting the API. Puppeteer launches that same headless-shell
+build explicitly, so its runtime executable matches the installed browser. Use the Render build command
+`npm install --include=dev && npm run build` and start command `npm run start`.
+The build installs frontend tooling; the start command installs the matching headless shell
+in the runtime cache before the renderer launches. The host must also provide the
+shared libraries required by Chromium. The panel renderer is rate-limited by the
+EA refresh timer and serializes screenshots through one browser page.
 
 ## Compact license keys and EA validation
 
