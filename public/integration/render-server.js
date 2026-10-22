@@ -105,8 +105,17 @@ export function mountPanelRenderer(app) {
         if (res.destroyed) return
         try {
           const p = await getPage()
-          await p.evaluate((s) => window.__setState(s), req.body || {})
-          await p.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+          const state = req.body || {}
+          const requestedTab = Number(state.tab)
+          const expectedTab = Number.isInteger(requestedTab) && requestedTab >= 0 && requestedTab < 7
+            ? requestedTab
+            : 0
+          await p.evaluate((s) => window.__setState(s), state)
+          await p.waitForFunction(
+            (tab) => document.querySelector('#panel-root > .ea-panel-frame')?.dataset.activeTab === String(tab),
+            { timeout: 2000 },
+            expectedTab,
+          )
           const panelSize = await p.evaluate(() => window.__getPanelSize())
           if (!Number.isInteger(panelSize?.width) || !Number.isInteger(panelSize?.height) ||
               panelSize.width < 270 || panelSize.width > 550 ||
@@ -127,9 +136,17 @@ export function mountPanelRenderer(app) {
               bmp.readUInt32LE(10) !== 54 || bmp.readUInt16LE(28) !== 32) {
             throw new Error('Panel renderer produced an invalid 32-bit BMP image')
           }
+          const renderedTab = await p.$eval(
+            '#panel-root > .ea-panel-frame',
+            (frame) => Number(frame.dataset.activeTab),
+          )
+          if (renderedTab !== expectedTab) {
+            throw new Error(`Panel tab changed during render (requested ${expectedTab}, rendered ${renderedTab})`)
+          }
           const hit = await p.evaluate(() => window.__getHitmap())
           res.set('Content-Type', 'image/bmp')
           res.set('Cache-Control', 'no-store')
+          res.set('X-Panel-Tab', String(renderedTab))
           res.set('X-Hitmap', hit.map((h) => `${h.action},${h.x},${h.y},${h.w},${h.h}`).join(';'))
           res.send(bmp)
         } catch (e) {

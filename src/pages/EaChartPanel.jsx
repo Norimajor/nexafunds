@@ -318,6 +318,7 @@ export default function EaChartPanel() {
     >
       <div
         className={`ea-panel-frame${state.minimized ? ' is-minimized' : ''}`}
+        data-active-tab={tab}
         style={{ transform: `scale(${scale})`, height: `${baseHeight}px` }}
       >
         <header className="ea-panel-header">
