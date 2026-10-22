@@ -65,7 +65,10 @@ a product-specific entitlement. The source snapshots in
 The EA chart panel is a browser-rendered image, not an embedded browser. The API
 loads `/ea-panel` in headless Chromium, applies the EA state, and returns a BMP
 plus `X-Hitmap` coordinates for MQL5 chart click handling. The React page exposes
-the state and hitmap hooks required by the renderer.
+the state and hitmap hooks required by the renderer. The EA uses this remote panel
+instead of its native chart-object dashboard; tab actions and controls are routed
+back to the EA, Settings controls the theme and scale, and the bitmap can be dragged
+to reposition it on the chart.
 
 Configure these values on the API hosting service:
 
@@ -76,9 +79,9 @@ PANEL_URL=https://your-frontend-domain.example/ea-panel
 
 `PANEL_URL` defaults to the same Express service at `/ea-panel` when omitted. If
 the frontend is deployed separately, set it to that public HTTPS URL. Keep
-`MT5_API_KEY` private and set the same value in the EA's `WP_ApiKey` input. In MT5,
-allow the API origin under Tools > Options > Expert Advisors > Allow WebRequest for
-listed URL, and configure the EA's `WP_Url` as
+`MT5_API_KEY` private and set the same value in the EA's `InpDashboardPanelApiKey`
+input. In MT5, allow the API origin under Tools > Options > Expert Advisors > Allow WebRequest for
+listed URL, and configure the EA's `InpDashboardPanelUrl` as
 `https://your-api-domain.example/api/mt5/panel.bmp`.
 
 The API service requires Node.js 22.12 or newer and must be able to launch Chromium.

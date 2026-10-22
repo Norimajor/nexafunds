@@ -107,6 +107,18 @@ export function mountPanelRenderer(app) {
           const p = await getPage()
           await p.evaluate((s) => window.__setState(s), req.body || {})
           await p.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+          const panelSize = await p.evaluate(() => window.__getPanelSize())
+          if (!Number.isInteger(panelSize?.width) || !Number.isInteger(panelSize?.height) ||
+              panelSize.width < 270 || panelSize.width > 550 ||
+              panelSize.height < 38 || panelSize.height > 835) {
+            throw new Error('Dashboard requested an unsupported panel size')
+          }
+          await p.setViewport({
+            width: panelSize.width,
+            height: Math.max(200, panelSize.height),
+            deviceScaleFactor: 1,
+          })
+          await p.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
           const el = await p.$('#panel-root > .ea-panel-frame')
           if (!el) throw new Error('EA panel root is missing from PANEL_URL')
           const shot = await el.screenshot({ type: 'png', omitBackground: true })

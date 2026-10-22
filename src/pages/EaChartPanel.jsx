@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react'
 import './EaChartPanel.css'
 
 const TAB_LABELS = ['Trade', 'Strategy', 'Info', 'News', 'AI', 'Logs', 'Settings']
+const THEMES = [
+  { label: 'GOLD', accent: '#d6a754', contrast: '#17130b' },
+  { label: 'GREEN', accent: '#2ecc71', contrast: '#07150d' },
+  { label: 'BLUE', accent: '#3898ec', contrast: '#07121b' },
+  { label: 'RED', accent: '#e74c3c', contrast: '#1b0907' },
+  { label: 'VIOLET', accent: '#9b59b6', contrast: '#170d1c' },
+  { label: 'CYAN', accent: '#1abcc4', contrast: '#061619' },
+  { label: 'SILVER', accent: '#bdc3c7', contrast: '#111416' },
+  { label: 'AMBER', accent: '#f39c12', contrast: '#191106' },
+]
 
 const initialState = {
   account: '',
@@ -11,6 +21,9 @@ const initialState = {
   equity: 0,
   floating: 0,
   tab: 0,
+  theme: 0,
+  scale: 100,
+  minimized: false,
   trading_active: false,
   new_trades_enabled: false,
   buy_enabled: true,
@@ -37,6 +50,13 @@ const normalizeTab = (value) => {
   const tab = Number(value)
   return Number.isInteger(tab) && tab >= 0 && tab < TAB_LABELS.length ? tab : 0
 }
+
+const normalizeTheme = (value) => {
+  const theme = Number(value)
+  return Number.isInteger(theme) && theme >= 0 && theme < THEMES.length ? theme : 0
+}
+
+const normalizeScale = (value) => Math.max(75, Math.min(150, numericValue(value, 100)))
 
 const numericValue = (value, fallback = 0) => {
   const amount = Number(value)
@@ -183,6 +203,41 @@ function LogsTab({ state }) {
   )
 }
 
+function SettingsTab({ state }) {
+  const activeTheme = normalizeTheme(state.theme)
+
+  return (
+    <>
+      <SectionTitle>APPEARANCE</SectionTitle>
+      <div className="ea-panel-setting-row">
+        <span>PANEL SIZE</span>
+        <PanelButton action="ScaleMinus" variant="step">-</PanelButton>
+        <strong>{Math.round(normalizeScale(state.scale))}%</strong>
+        <PanelButton action="ScalePlus" variant="step">+</PanelButton>
+      </div>
+      <div className="ea-panel-setting-hint">Drag the panel on the chart to move it.</div>
+      <SectionTitle>ACCENT COLOUR</SectionTitle>
+      <div className="ea-panel-theme-grid">
+        {THEMES.map((theme, index) => (
+          <PanelButton
+            key={theme.label}
+            action={`Theme${index}`}
+            variant={activeTheme === index ? 'theme-active' : 'theme'}
+            aria-label={`Use ${theme.label.toLowerCase()} dashboard colour`}
+            style={{ '--theme-swatch': theme.accent, '--theme-contrast': theme.contrast }}
+          >
+            {theme.label}
+          </PanelButton>
+        ))}
+      </div>
+      <div className="ea-panel-setting-actions">
+        <PanelButton action="ResetPosition" variant="recheck">RESET POSITION</PanelButton>
+        <PanelButton action="Minimize" variant="recheck">MINIMIZE</PanelButton>
+      </div>
+    </>
+  )
+}
+
 export default function EaChartPanel() {
   const [state, setState] = useState(initialState)
   const tab = normalizeTab(state.tab)
@@ -211,6 +266,9 @@ export default function EaChartPanel() {
           stop_loss: nextState.stop_loss ?? nextState.stopLoss ?? current.stop_loss,
           take_profit: nextState.take_profit ?? nextState.takeProfit ?? current.take_profit,
           tab: normalizeTab(nextState.tab ?? current.tab),
+          theme: normalizeTheme(nextState.theme ?? current.theme),
+          scale: normalizeScale(nextState.scale ?? current.scale),
+          minimized: typeof nextState.minimized === 'boolean' ? nextState.minimized : current.minimized,
         }
       })
     }
@@ -229,54 +287,71 @@ export default function EaChartPanel() {
         }
       })
     }
+    window.__getPanelSize = () => {
+      const scale = normalizeScale(state.scale) / 100
+      const height = state.minimized ? 52 : 555
+      return { width: Math.ceil(365 * scale), height: Math.ceil(height * scale) }
+    }
     window.__panelReady = true
     return () => {
       delete window.__setState
       delete window.__getHitmap
+      delete window.__getPanelSize
       delete window.__panelReady
     }
-  }, [])
+  }, [state.scale, state.minimized])
+
+  const scale = normalizeScale(state.scale) / 100
+  const baseHeight = state.minimized ? 52 : 555
+  const theme = THEMES[normalizeTheme(state.theme)]
 
   return (
-    <div id="panel-root">
-      <div className="ea-panel-frame">
+    <div
+      id="panel-root"
+      style={{
+        width: `${365 * scale}px`,
+        height: `${baseHeight * scale}px`,
+        '--panel-scale': scale,
+        '--panel-accent': theme.accent,
+        '--panel-accent-contrast': theme.contrast,
+      }}
+    >
+      <div
+        className={`ea-panel-frame${state.minimized ? ' is-minimized' : ''}`}
+        style={{ transform: `scale(${scale})`, height: `${baseHeight}px` }}
+      >
         <header className="ea-panel-header">
           <h1>NEXA AI <small>v{state.version || '2.35'}</small></h1>
           <span className={`ea-panel-status ${active ? 'is-active' : ''}`}><i />{active ? 'ACTIVE' : 'STOPPED'}</span>
-          <PanelButton action="MinTop" variant="minimize" aria-label="Minimize dashboard" />
+          <PanelButton action="MinTop" variant="minimize" aria-label={state.minimized ? 'Expand dashboard' : 'Minimize dashboard'}>{state.minimized ? '+' : '-'}</PanelButton>
         </header>
-        <nav className="ea-panel-tabs" aria-label="EA panel sections">
-          {TAB_LABELS.map((label, index) => <PanelButton key={label} action={`TAB${index}`} variant={tab === index ? 'tab-active' : 'tab'}>{label}</PanelButton>)}
-        </nav>
-        <main className="ea-panel-content">
-          {tab === 0 && <TradeTab state={state} />}
-          {tab === 1 && <StrategyTab state={state} />}
-          {tab === 2 && <InfoTab state={state} />}
-          {tab === 4 && <AiTab state={state} />}
-          {tab === 5 && <LogsTab state={state} />}
-          {tab === 3 && (
-            <div className="ea-panel-detail-block">
-              <span>NEWS FILTER</span><strong>{state.news_enabled ? 'ON' : 'OFF'}</strong>
-              <span>TRADING SESSION</span><strong>{state.session || 'Unknown'}</strong>
-              <PanelButton action="NewsFilter">HIGH IMPACT NEWS</PanelButton>
-              <PanelButton action="SessionFilter">SESSION FILTER</PanelButton>
-              <PanelButton action="Asian">ASIAN</PanelButton>
-              <PanelButton action="London">LONDON</PanelButton>
-              <PanelButton action="NewYork">NEW YORK</PanelButton>
-            </div>
-          )}
-          {tab === 6 && (
-            <div className="ea-panel-detail-block">
-              <span>REFRESH RATE</span><strong>{state.refresh_ms || 100} ms</strong>
-              <span>MAX DAILY TRADES</span><strong>{state.max_daily || '--'}</strong>
-              <PanelButton action="ScaleMinus">SCALE -</PanelButton>
-              <PanelButton action="ScalePlus">SCALE +</PanelButton>
-              <PanelButton action="ResetPosition">RESET POSITION</PanelButton>
-              <PanelButton action="Minimize">MINIMIZE</PanelButton>
-            </div>
-          )}
-        </main>
-        <footer className="ea-panel-footer"><span>{state.server || 'MT5'}</span><span>{state.date || new Date().toISOString().slice(0, 10)}</span><strong>{state.time || new Date().toISOString().slice(11, 19)}</strong></footer>
+        {!state.minimized && (
+          <>
+            <nav className="ea-panel-tabs" aria-label="EA panel sections">
+              {TAB_LABELS.map((label, index) => <PanelButton key={label} action={`TAB${index}`} variant={tab === index ? 'tab-active' : 'tab'}>{label}</PanelButton>)}
+            </nav>
+            <main className="ea-panel-content">
+              {tab === 0 && <TradeTab state={state} />}
+              {tab === 1 && <StrategyTab state={state} />}
+              {tab === 2 && <InfoTab state={state} />}
+              {tab === 4 && <AiTab state={state} />}
+              {tab === 5 && <LogsTab state={state} />}
+              {tab === 3 && (
+                <div className="ea-panel-detail-block">
+                  <span>NEWS FILTER</span><strong>{state.news_enabled ? 'ON' : 'OFF'}</strong>
+                  <span>TRADING SESSION</span><strong>{state.session || 'Unknown'}</strong>
+                  <PanelButton action="NewsFilter">HIGH IMPACT NEWS</PanelButton>
+                  <PanelButton action="SessionFilter">SESSION FILTER</PanelButton>
+                  <PanelButton action="Asian">ASIAN</PanelButton>
+                  <PanelButton action="London">LONDON</PanelButton>
+                  <PanelButton action="NewYork">NEW YORK</PanelButton>
+                </div>
+              )}
+              {tab === 6 && <SettingsTab state={state} />}
+            </main>
+            <footer className="ea-panel-footer"><span>{state.server || 'MT5'}</span><span>{state.date || new Date().toISOString().slice(0, 10)}</span><strong>{state.time || new Date().toISOString().slice(11, 19)}</strong></footer>
+          </>
+        )}
       </div>
     </div>
   )
